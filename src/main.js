@@ -73,7 +73,7 @@ function onModelReady(obj) {
 
 const loader = new GLTFLoader()
 loader.load(
-  `${import.meta.env.BASE_URL}models/un-garden_1.glb`,
+  `${import.meta.env.BASE_URL}models/base_basic_shaded.glb`,
   (gltf) => {
     const obj = gltf.scene
     centerModel(obj)
