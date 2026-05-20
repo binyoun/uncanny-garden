@@ -39,7 +39,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 2))
 const key = new THREE.DirectionalLight(0xffffff, 3)
 key.position.set(2, 4, 3)
 scene.add(key)
-const fill = new THREE.PointLight(0x8b1fb5, 4, 10)
+const fill = new THREE.PointLight(0xffb090, 2, 10)
 fill.position.set(-2, 1, -2)
 scene.add(fill)
 
