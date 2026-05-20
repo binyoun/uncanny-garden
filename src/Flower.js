@@ -14,8 +14,8 @@ export class Flower {
   }
 
   async load() {
-    // Each element will have its own GLB — falling back to _1 until all are ready
-    const modelPath = `/models/un-garden_${this.config.modelIndex}.glb`
+    // BASE_URL is '/uncanny-garden/' on Pages, '/' in dev — must prefix manually
+    const modelPath = `${import.meta.env.BASE_URL}models/un-garden_${this.config.modelIndex}.glb`
 
     return new Promise((resolve, reject) => {
       loader.load(
