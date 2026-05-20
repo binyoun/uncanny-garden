@@ -160,8 +160,7 @@ renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime()
   controls.update()
   if (model) model.rotation.y = t * 0.12
-  fill.color.setHSL(0.75 + Math.sin(t * 0.2) * 0.06, 0.7, 0.4)
-  fill.intensity = isActive ? 4 + Math.sin(t * 2) * 2 : 2 + Math.sin(t * 0.4) * 0.5
+  fill.intensity = isActive ? 3 + Math.sin(t * 2) * 1 : 1
   renderer.render(scene, camera)
 })
 
