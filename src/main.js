@@ -139,14 +139,6 @@ function onTap(clientX, clientY) {
 
   isActive = !isActive
   isActive ? sound.play() : sound.stop()
-
-  model.traverse((n) => {
-    if (n.isMesh && n.material) {
-      n.material = n.material.clone()
-      n.material.emissive = new THREE.Color(isActive ? 0x5a0099 : 0x000000)
-      n.material.emissiveIntensity = isActive ? 0.6 : 0
-    }
-  })
 }
 
 renderer.domElement.addEventListener('click', (e) => onTap(e.clientX, e.clientY))
