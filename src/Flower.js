@@ -67,11 +67,6 @@ export class Flower {
     this._setGlow(1.2)
     this._pulseScale(1.0, 1.18, 400)
 
-    // Show element label
-    const label = document.getElementById('element-label')
-    document.getElementById('element-name').textContent = this.config.label
-    document.getElementById('element-desc').textContent = this.config.desc
-    label.classList.add('visible')
   }
 
   deactivate() {
