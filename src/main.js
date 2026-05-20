@@ -36,11 +36,11 @@ controls.update()
 
 // ── LIGHTING ──────────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xffffff, 2))
-const key = new THREE.DirectionalLight(0xffffff, 3)
+const key = new THREE.DirectionalLight(0xffffff, 2)
 key.position.set(2, 4, 3)
 scene.add(key)
-const fill = new THREE.PointLight(0xffb090, 2, 10)
-fill.position.set(-2, 1, -2)
+const fill = new THREE.DirectionalLight(0xffffff, 1)
+fill.position.set(-2, 1, -1)
 scene.add(fill)
 
 // ── SOUND ─────────────────────────────────────────────────────
@@ -160,7 +160,6 @@ renderer.setAnimationLoop(() => {
   const t = clock.getElapsedTime()
   controls.update()
   if (model) model.rotation.y = t * 0.12
-  fill.intensity = isActive ? 3 + Math.sin(t * 2) * 1 : 1
   renderer.render(scene, camera)
 })
 
