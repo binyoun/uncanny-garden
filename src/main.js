@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { PMREMGenerator } from 'three'
@@ -55,7 +56,11 @@ function setStatus(msg) {
   el.style.display = msg ? 'block' : 'none'
 }
 
+const draco = new DRACOLoader()
+draco.setDecoderPath(`${import.meta.env.BASE_URL}draco/`)
+
 const loader = new GLTFLoader()
+loader.setDRACOLoader(draco)
 loader.load(
   `${import.meta.env.BASE_URL}models/base_basic_shaded.glb`,
   (gltf) => {
@@ -86,7 +91,7 @@ loader.load(
   }
 )
 
-// ── CAMERA PERMISSION + VIDEO BACKGROUND ──────────────────────
+// ── CAMERA VIDEO BACKGROUND ───────────────────────────────────
 const video = document.createElement('video')
 video.setAttribute('playsinline', '')
 video.setAttribute('autoplay', '')
@@ -98,17 +103,26 @@ video.style.cssText = `
 `
 document.body.insertBefore(video, document.body.firstChild)
 
-navigator.mediaDevices
-  .getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
-  .then((stream) => {
+// ── START ON USER GESTURE (required for camera + audio) ───────
+document.getElementById('start').addEventListener('click', async () => {
+  document.getElementById('start').style.display = 'none'
+  document.getElementById('status').style.display = 'block'
+
+  // Camera
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }
+    })
     video.srcObject = stream
-    return video.play()
-  })
-  .catch((err) => {
+    await video.play()
+  } catch (err) {
     console.warn('[uncanny-garden] camera denied:', err)
-    // Dark background fallback
     renderer.setClearColor(0x111118, 1)
-  })
+  }
+
+  // Prime audio context
+  await sound.init()
+}, { once: true })
 
 // ── TAP — toggle glow + sound ─────────────────────────────────
 const raycaster = new THREE.Raycaster()
@@ -124,7 +138,7 @@ function onTap(clientX, clientY) {
   if (raycaster.intersectObject(model, true).length === 0) return
 
   isActive = !isActive
-  sound.init().then(() => isActive ? sound.play() : sound.stop())
+  isActive ? sound.play() : sound.stop()
 
   model.traverse((n) => {
     if (n.isMesh && n.material) {

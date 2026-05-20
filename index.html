@@ -16,6 +16,26 @@
 
     canvas { display: block; }
 
+    #start {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.72);
+      z-index: 20;
+      cursor: pointer;
+    }
+
+    #start span {
+      font-size: 0.7rem;
+      letter-spacing: 0.35em;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 0.9rem 2rem;
+    }
+
     #status {
       position: fixed;
       top: 50%;
@@ -25,6 +45,8 @@
       letter-spacing: 0.25em;
       color: rgba(255,255,255,0.45);
       text-transform: uppercase;
+      display: none;
+      z-index: 10;
     }
 
     #hint {
@@ -40,12 +62,14 @@
       transition: opacity 1s;
       pointer-events: none;
       white-space: nowrap;
+      z-index: 10;
     }
   </style>
 </head>
 <body>
+  <div id="start"><span>Touch to Begin</span></div>
   <div id="status">Loading…</div>
-  <div id="hint">Tap to wake · Drag to orbit</div>
+  <div id="hint">Tap model · Drag to orbit</div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
