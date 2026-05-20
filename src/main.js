@@ -1,77 +1,127 @@
 import * as THREE from 'three'
-import { Garden } from './Garden.js'
-import { ArSession } from './ArSession.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { SoundEngine } from './SoundEngine.js'
 
 // ── RENDERER ──────────────────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.xr.enabled = true
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 document.body.appendChild(renderer.domElement)
 
 // ── SCENE ──────────────────────────────────────────────────────
 const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x0a0a0f)
 
 // ── CAMERA ────────────────────────────────────────────────────
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 40)
-camera.position.set(0, 1.6, 0)
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100)
+camera.position.set(0, 1.2, 3.5)
+
+// ── CONTROLS ──────────────────────────────────────────────────
+const controls = new OrbitControls(camera, renderer.domElement)
+controls.enableDamping = true
+controls.dampingFactor = 0.05
+controls.target.set(0, 0.5, 0)
+controls.update()
 
 // ── LIGHTING ──────────────────────────────────────────────────
-const ambient = new THREE.AmbientLight(0xffffff, 0.8)
-scene.add(ambient)
+scene.add(new THREE.AmbientLight(0xffffff, 1.2))
 
-const sun = new THREE.DirectionalLight(0xfff4e0, 2)
-sun.position.set(2, 4, 2)
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.5)
+sun.position.set(3, 5, 3)
 sun.castShadow = true
 scene.add(sun)
 
-// Subtle purple fill from below
-const fill = new THREE.PointLight(0x8b1fb5, 1.5, 5)
-fill.position.set(0, -0.5, 0)
+const fill = new THREE.PointLight(0x8b1fb5, 3, 12)
+fill.position.set(-2, 1, -2)
 scene.add(fill)
 
 // ── SOUND ─────────────────────────────────────────────────────
-const soundEngine = new SoundEngine()
+const sound = new SoundEngine()
 
-// ── GARDEN ────────────────────────────────────────────────────
-const garden = new Garden(scene, soundEngine)
-garden.load().then(() => {
-  console.log('[uncanny-garden] all elements loaded')
-})
+// ── LOAD MODEL ────────────────────────────────────────────────
+const loader = new GLTFLoader()
+let model = null
+let isActive = false
 
-// ── AR SESSION ────────────────────────────────────────────────
-const arSession = new ArSession(renderer, scene, camera, garden)
+loader.load(
+  `${import.meta.env.BASE_URL}models/un-garden_1.glb`,
+  (gltf) => {
+    model = gltf.scene
 
-// ── BUTTON ────────────────────────────────────────────────────
-document.getElementById('ar-button').addEventListener('click', async () => {
-  try {
-    await soundEngine.init()
-    await arSession.start()
-  } catch (err) {
-    console.error('Startup error:', err)
-    document.getElementById('ios-notice').textContent = `Error: ${err.message ?? err}`
-    const btn = document.getElementById('ar-button')
-    btn.textContent = 'Enter Garden'
-    btn.disabled = false
+    // Auto-centre and fit to view
+    const box = new THREE.Box3().setFromObject(model)
+    const centre = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3())
+    const maxDim = Math.max(size.x, size.y, size.z)
+    model.position.sub(centre)
+    model.scale.setScalar(2 / maxDim)
+
+    model.traverse((node) => {
+      if (node.isMesh) {
+        node.castShadow = true
+        node.receiveShadow = true
+      }
+    })
+
+    scene.add(model)
+    document.getElementById('hint').style.opacity = '1'
+  },
+  undefined,
+  (err) => console.error('[uncanny-garden] model load error:', err)
+)
+
+// ── CLICK — toggle sound + glow ────────────────────────────────
+const raycaster = new THREE.Raycaster()
+const pointer = new THREE.Vector2()
+
+function onTap(clientX, clientY) {
+  if (!model) return
+  pointer.set(
+    (clientX / window.innerWidth) * 2 - 1,
+    -(clientY / window.innerHeight) * 2 + 1
+  )
+  raycaster.setFromCamera(pointer, camera)
+  const hits = raycaster.intersectObject(model, true)
+  if (hits.length === 0) return
+
+  isActive = !isActive
+  if (isActive) {
+    sound.play()
+    model.traverse((n) => {
+      if (n.isMesh) { n.material = n.material.clone(); n.material.emissive = new THREE.Color(0x8b1fb5); n.material.emissiveIntensity = 0.6 }
+    })
+  } else {
+    sound.stop()
+    model.traverse((n) => {
+      if (n.isMesh) n.material.emissiveIntensity = 0
+    })
   }
-})
+}
 
-// ── CLOCK ─────────────────────────────────────────────────────
-const clock = new THREE.Clock()
+renderer.domElement.addEventListener('click', (e) => {
+  sound.init().then(() => onTap(e.clientX, e.clientY))
+})
+renderer.domElement.addEventListener('touchend', (e) => {
+  const t = e.changedTouches[0]
+  sound.init().then(() => onTap(t.clientX, t.clientY))
+}, { passive: true })
 
 // ── RENDER LOOP ───────────────────────────────────────────────
-renderer.setAnimationLoop((_, frame) => {
+const clock = new THREE.Clock()
+renderer.setAnimationLoop(() => {
   const elapsed = clock.getElapsedTime()
+  controls.update()
 
-  // Update fill light colour — slow pulse
-  fill.color.setHSL(0.75 + Math.sin(elapsed * 0.2) * 0.08, 0.7, 0.4)
-  fill.intensity = 1.2 + Math.sin(elapsed * 0.4) * 0.4
+  // Slow auto-rotate when idle
+  if (model && !isActive) model.rotation.y = elapsed * 0.15
 
-  garden.update(elapsed)
-  arSession.update(frame)
+  // Fill light pulse
+  fill.color.setHSL(0.75 + Math.sin(elapsed * 0.2) * 0.06, 0.7, 0.4)
+  fill.intensity = isActive ? 3 + Math.sin(elapsed * 2) * 1.5 : 2 + Math.sin(elapsed * 0.4) * 0.5
+
   renderer.render(scene, camera)
 })
 
