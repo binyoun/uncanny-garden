@@ -36,11 +36,15 @@ export class ArSession {
   }
 
   async start() {
-    // iOS detection — no WebXR hit-test support
+    const btn = document.getElementById('ar-button')
+    btn.textContent = 'Starting…'
+    btn.disabled = true
+
+    // iOS — no WebXR AR support
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     if (isIOS) {
       document.getElementById('ios-notice').textContent =
-        'AR requires Android Chrome or a WebXR-compatible browser. Showing 3D preview mode.'
+        'AR requires Android Chrome. Showing 3D preview.'
       this._startPreviewMode()
       return
     }
@@ -52,31 +56,44 @@ export class ArSession {
 
     const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false)
     if (!supported) {
+      document.getElementById('ios-notice').textContent =
+        'AR not supported on this device. Showing 3D preview.'
       this._startPreviewMode()
       return
     }
 
     try {
+      // hit-test optional so devices without ARCore surface detection still open
       const session = await navigator.xr.requestSession('immersive-ar', {
-        requiredFeatures: ['hit-test'],
-        optionalFeatures: ['dom-overlay'],
+        requiredFeatures: [],
+        optionalFeatures: ['hit-test', 'dom-overlay'],
         domOverlay: { root: document.getElementById('overlay') },
       })
 
       this.renderer.xr.setReferenceSpaceType('local')
       await this.renderer.xr.setSession(session)
 
-      this.refSpace = await session.requestReferenceSpace('viewer')
-      this.hitTestSource = await session.requestHitTestSource({ space: this.refSpace })
+      // Request hit-test only if the feature was granted
+      try {
+        this.refSpace = await session.requestReferenceSpace('viewer')
+        this.hitTestSource = await session.requestHitTestSource({ space: this.refSpace })
+      } catch {
+        // Hit-test unavailable — tap-to-place won't work but AR passthrough will
+        this.hitTestSource = null
+      }
 
       document.getElementById('intro').style.display = 'none'
       document.getElementById('hud').style.display = 'block'
-      document.getElementById('hint-text').textContent = 'Scanning surface…'
+      document.getElementById('hint-text').textContent =
+        this.hitTestSource ? 'Scanning surface…' : 'Move around to explore'
 
       this.renderer.domElement.addEventListener('click', this._onTapBound)
     } catch (err) {
       console.error('AR session failed:', err)
-      this._startPreviewMode()
+      document.getElementById('ios-notice').textContent =
+        `Could not start AR: ${err.message ?? err}`
+      btn.textContent = 'Enter Garden'
+      btn.disabled = false
     }
   }
 

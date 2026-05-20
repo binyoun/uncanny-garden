@@ -47,8 +47,16 @@ const arSession = new ArSession(renderer, scene, camera, garden)
 
 // ── BUTTON ────────────────────────────────────────────────────
 document.getElementById('ar-button').addEventListener('click', async () => {
-  await soundEngine.init()
-  await arSession.start()
+  try {
+    await soundEngine.init()
+    await arSession.start()
+  } catch (err) {
+    console.error('Startup error:', err)
+    document.getElementById('ios-notice').textContent = `Error: ${err.message ?? err}`
+    const btn = document.getElementById('ar-button')
+    btn.textContent = 'Enter Garden'
+    btn.disabled = false
+  }
 })
 
 // ── CLOCK ─────────────────────────────────────────────────────
