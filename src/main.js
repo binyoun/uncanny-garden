@@ -49,46 +49,40 @@ const sound = new SoundEngine()
 let model = null
 let isActive = false
 
-function centerModel(obj) {
-  const box = new THREE.Box3().setFromObject(obj)
-  const centre = box.getCenter(new THREE.Vector3())
-  const size = box.getSize(new THREE.Vector3())
-  const maxDim = Math.max(size.x, size.y, size.z)
-  obj.position.sub(centre)
-  if (maxDim > 0) obj.scale.setScalar(2 / maxDim)
-}
-
 function setStatus(msg) {
   const el = document.getElementById('status')
   el.textContent = msg
   el.style.display = msg ? 'block' : 'none'
 }
 
-function onModelReady(obj) {
-  model = obj
-  scene.add(model)
-  setStatus('')
-  document.getElementById('hint').style.opacity = '1'
-}
-
 const loader = new GLTFLoader()
 loader.load(
   `${import.meta.env.BASE_URL}models/base_basic_shaded.glb`,
   (gltf) => {
-    const obj = gltf.scene
-    centerModel(obj)
-    obj.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true } })
-    onModelReady(obj)
+    model = gltf.scene
+
+    // Add to scene first so Three.js computes correct world bounds
+    scene.add(model)
+
+    const box = new THREE.Box3().setFromObject(model)
+    const centre = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3())
+    const maxDim = Math.max(size.x, size.y, size.z)
+
+    model.position.set(-centre.x, -centre.y, -centre.z)
+    if (maxDim > 0) model.scale.setScalar(2 / maxDim)
+
+    model.traverse((n) => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true } })
+
+    setStatus('')
+    document.getElementById('hint').style.opacity = '1'
   },
   (xhr) => {
     if (xhr.total) setStatus(`Loading ${Math.round(xhr.loaded / xhr.total * 100)}%`)
   },
   (err) => {
     console.error('[uncanny-garden] GLB failed:', err)
-    // Fallback: torus knot so something is always visible
-    const geo = new THREE.TorusKnotGeometry(0.6, 0.18, 120, 20)
-    const mat = new THREE.MeshStandardMaterial({ color: 0x6a0dad, metalness: 0.5, roughness: 0.3 })
-    onModelReady(new THREE.Mesh(geo, mat))
+    setStatus('Model failed — check console')
   }
 )
 
