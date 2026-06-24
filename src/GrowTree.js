@@ -2,25 +2,18 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 
-const SEED_SCALE = 0.004
-const FULL_SCALE = 2.0
-const SEED_HOLD  = 2000
-const PHASE1_MS  = 6000
-const PHASE2_MS  = 10000
+const SEED_SCALE    = 0.004
+const FULL_SCALE    = 2.0
+const SEED_HOLD     = 2000
+const GROW_MS       = 8000   // seed → full bloom (single phase)
+const APPROACH_MS   = 2500   // bloom → move toward viewer
+const RECEDE_MS     = 2000   // move back and shrink away
+const APPROACH_DIST = 0.4    // metres toward camera during approach
 
 export const SEED_HOLD_MS = SEED_HOLD
 
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3)
-}
-
-function growthProgress(elapsed) {
-  if (elapsed <= PHASE1_MS) {
-    return easeOutCubic(elapsed / PHASE1_MS) * 0.5
-  }
-  const p2 = Math.min((elapsed - PHASE1_MS) / PHASE2_MS, 1)
-  return 0.5 + easeOutCubic(p2) * 0.5
-}
+function easeOutCubic(t)   { return 1 - Math.pow(1 - t, 3) }
+function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2 }
 
 export class GrowTree {
   constructor(scene) {
@@ -29,7 +22,6 @@ export class GrowTree {
     this._state  = {}
   }
 
-  // onEach(element) fires as each model finishes — lets caller track progress.
   load(paths, onEach) {
     return Promise.all(
       Object.entries(paths).map(([el, path]) =>
@@ -63,7 +55,6 @@ export class GrowTree {
 
   place(element, worldPosition) {
     if (this._state[element]) return
-
     const model = this._models[element]
     if (!model) return
 
@@ -73,38 +64,63 @@ export class GrowTree {
     anchor.add(model)
     this._scene.add(anchor)
 
-    const state = { anchor, growing: false, growStart: null, lastProgress: 0, seedTimer: null }
-    this._state[element] = state
+    this._state[element] = {
+      anchor,
+      origPosZ:     worldPosition.z,
+      growing:      false,
+      growStart:    null,
+      lastProgress: 0,
+      seedTimer:    null,
+    }
 
-    state.seedTimer = setTimeout(() => {
-      state.growing   = true
-      state.growStart = performance.now()
+    this._state[element].seedTimer = setTimeout(() => {
+      this._state[element].growing   = true
+      this._state[element].growStart = performance.now()
     }, SEED_HOLD)
   }
 
-  // Returns { element: progress } for all placed elements.
   update() {
     const result = {}
+
     for (const [element, state] of Object.entries(this._state)) {
-      if (!state.growing) {
-        result[element] = state.lastProgress
-        continue
-      }
-      const elapsed  = performance.now() - state.growStart
-      const progress = growthProgress(elapsed)
-      state.lastProgress = Math.min(progress, 1)
+      if (!state.growing) { result[element] = state.lastProgress; continue }
 
-      const scale = SEED_SCALE + (FULL_SCALE - SEED_SCALE) * state.lastProgress
-      state.anchor.scale.setScalar(scale)
-      if (progress < 0.5) state.anchor.rotation.y += 0.003
+      const elapsed = performance.now() - state.growStart
 
-      if (elapsed >= PHASE1_MS + PHASE2_MS) {
+      if (elapsed < GROW_MS) {
+        // ── Bloom up ──────────────────────────────────────────────
+        const t = elapsed / GROW_MS
+        state.anchor.scale.setScalar(SEED_SCALE + (FULL_SCALE - SEED_SCALE) * easeOutCubic(t))
+        if (t < 0.4) state.anchor.rotation.y += 0.008
+        state.lastProgress = easeOutCubic(t) * 0.8
+
+      } else if (elapsed < GROW_MS + APPROACH_MS) {
+        // ── Approach: float toward viewer ─────────────────────────
+        const t    = (elapsed - GROW_MS) / APPROACH_MS
+        const ease = easeInOutCubic(t)
+        state.anchor.scale.setScalar(FULL_SCALE)
+        state.anchor.position.z = state.origPosZ + ease * APPROACH_DIST
+        state.lastProgress = 0.8 + ease * 0.1
+
+      } else if (elapsed < GROW_MS + APPROACH_MS + RECEDE_MS) {
+        // ── Recede: move back and shrink ──────────────────────────
+        const t    = (elapsed - GROW_MS - APPROACH_MS) / RECEDE_MS
+        const ease = easeInOutCubic(t)
+        state.anchor.position.z = state.origPosZ + (1 - ease) * APPROACH_DIST
+        state.anchor.scale.setScalar(FULL_SCALE * (1 - ease))
+        state.lastProgress = 0.9 + ease * 0.1
+
+      } else {
+        // ── Done ──────────────────────────────────────────────────
+        state.anchor.scale.setScalar(0)
+        state.anchor.position.z = state.origPosZ
         state.growing      = false
         state.lastProgress = 1
       }
 
       result[element] = state.lastProgress
     }
+
     return result
   }
 

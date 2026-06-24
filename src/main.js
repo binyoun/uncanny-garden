@@ -72,6 +72,7 @@ introLoader.load(
       -(center.y / max) * 2.4,
       -(center.z / max) * 2.4
     )
+    model.position.y -= 0.65   // push model 40% lower in frame
     introScene.add(model)
     introModel = model
   },
@@ -120,7 +121,7 @@ for (const el of SEQUENCE) particles[el] = new ParticleSystem(scene)
 
 // ── Orbit group (final state) ─────────────────────────────────
 const orbitGroup = new THREE.Group()
-orbitGroup.position.set(0, -0.1, -1.5)
+orbitGroup.position.set(0, -0.1, -1.0)
 orbitGroup.visible = false
 scene.add(orbitGroup)
 
@@ -176,6 +177,7 @@ let seqIndex       = 0
 let seqActive      = false
 let allComplete    = false
 const completedEls = new Set()
+let activeAnchor   = null   // the currently-growing model's anchor (for drag)
 
 function currentElement() { return SEQUENCE[seqIndex] }
 
@@ -193,8 +195,8 @@ function onElementComplete(el) {
 }
 
 // ── Final orbit state ─────────────────────────────────────────
-const ORBIT_SCALE  = 0.42
-const ORBIT_RADIUS = 0.65
+const ORBIT_SCALE  = 0.65
+const ORBIT_RADIUS = 1.0
 
 function activateFinalState() {
   allComplete = true
@@ -266,6 +268,7 @@ tracker.addEventListener('gesture-confirmed', (e) => {
 
   const worldPos = cardinalWorldPos(element)
   tree.place(element, worldPos)
+  activeAnchor = tree.getAnchor(element)
   particles[element].start(element, worldPos)
   ensureSound().then(() => sound.triggerPlacement())
   // Next prompt shows only after this model fully grows and disappears
@@ -335,6 +338,37 @@ canvas.addEventListener('mousemove', (e) => {
   if (!introActive || !mouseDown || !introModel) return
   introRotY     += (e.clientX - introDragPrevX) * 0.012
   introDragPrevX = e.clientX
+})
+
+// ── AR model drag (during individual element growth) ──────────
+let arDragPrevX = 0, arDragPrevY = 0, arMouseDown = false
+
+canvas.addEventListener('touchstart', (e) => {
+  if (introActive || allComplete) return
+  arDragPrevX = e.touches[0].clientX
+  arDragPrevY = e.touches[0].clientY
+}, { passive: true })
+
+canvas.addEventListener('touchmove', (e) => {
+  if (introActive || allComplete || !activeAnchor) return
+  const dx = e.touches[0].clientX - arDragPrevX
+  const dy = e.touches[0].clientY - arDragPrevY
+  activeAnchor.rotation.y += dx * 0.012
+  activeAnchor.position.y -= dy * 0.004
+  arDragPrevX = e.touches[0].clientX
+  arDragPrevY = e.touches[0].clientY
+}, { passive: true })
+
+canvas.addEventListener('mousedown', (e) => {
+  if (introActive || allComplete) return
+  arMouseDown = true; arDragPrevX = e.clientX; arDragPrevY = e.clientY
+})
+canvas.addEventListener('mouseup',   () => { arMouseDown = false })
+canvas.addEventListener('mousemove', (e) => {
+  if (introActive || allComplete || !activeAnchor || !arMouseDown) return
+  activeAnchor.rotation.y += (e.clientX - arDragPrevX) * 0.012
+  activeAnchor.position.y -= (e.clientY - arDragPrevY) * 0.004
+  arDragPrevX = e.clientX; arDragPrevY = e.clientY
 })
 
 // ── Initialise everything on page load ────────────────────────
