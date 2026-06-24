@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { HandTracker } from './HandTracker.js'
-import { GrowTree, SEED_HOLD_MS } from './GrowTree.js'
+import { GrowTree } from './GrowTree.js'
 import { ParticleSystem } from './ParticleSystem.js'
 import { SoundEngine } from './SoundEngine.js'
 
@@ -87,20 +87,24 @@ const ELEMENT_INFO = {
   water: { label: 'Water 수', gesture: 'ok ring',     color: '#0066ff' },
 }
 
-// Wu Xing cardinal NDC positions
-const CARDINAL_NDC = {
-  wood:  { x:  0.45, y:  0.0  },  // East
-  fire:  { x:  0.0,  y: -0.38 },  // South
-  earth: { x:  0.0,  y:  0.0  },  // Center
-  metal: { x: -0.45, y:  0.0  },  // West
-  water: { x:  0.0,  y:  0.38 },  // North
+// Wu Xing cardinal horizontal spread — all placed at ground level
+const CARDINAL_NDC_X = {
+  wood:   0.38,   // East
+  fire:   0.19,   // South-East (offset right slightly for spread)
+  earth:  0.0,    // Center
+  metal: -0.38,   // West
+  water: -0.19,   // North-West (offset left slightly for spread)
 }
 
-function ndcToWorld(nx, ny, depth = 1.5) {
-  const ndc = new THREE.Vector3(nx, ny, 0.5)
+// Place each model close to viewer at floor level so it grows upward through frame
+function cardinalWorldPos(element) {
+  const nx = CARDINAL_NDC_X[element]
+  const ndc = new THREE.Vector3(nx, 0, 0.5)
   ndc.unproject(camera)
   const dir = ndc.sub(camera.position).normalize()
-  return camera.position.clone().add(dir.multiplyScalar(depth))
+  const pos = camera.position.clone().add(dir.multiplyScalar(0.9))
+  pos.y -= 0.5   // push anchor to floor so model grows upward from below frame
+  return pos
 }
 
 // ── AR modules ────────────────────────────────────────────────
@@ -111,7 +115,7 @@ const sound   = new SoundEngine()
 const particles = {}
 for (const el of SEQUENCE) particles[el] = new ParticleSystem(scene)
 
-// ── Orbit group (used in final state) ────────────────────────
+// ── Orbit group (final state) ─────────────────────────────────
 const orbitGroup = new THREE.Group()
 orbitGroup.position.set(0, -0.1, -1.5)
 orbitGroup.visible = false
@@ -126,7 +130,6 @@ const loadingLabel = document.getElementById('loading-label')
 
 // ── HUD ───────────────────────────────────────────────────────
 const hud           = document.getElementById('hud')
-const statusEl      = document.getElementById('status')
 const elementPrompt = document.getElementById('element-prompt')
 const promptElement = document.getElementById('prompt-element')
 const promptGesture = document.getElementById('prompt-gesture')
@@ -166,18 +169,24 @@ function updatePalmRing(palm, progress, element) {
 function hidePalmRing() { palmRing.style.display = 'none' }
 
 // ── Sequence state ────────────────────────────────────────────
-let seqIndex         = 0
-let seqActive        = false
-let allComplete      = false
-const completedEls   = new Set()
+let seqIndex       = 0
+let seqActive      = false
+let allComplete    = false
+const completedEls = new Set()
 
 function currentElement() { return SEQUENCE[seqIndex] }
 
-function advanceSequence() {
-  seqIndex++
-  if (seqIndex >= SEQUENCE.length) return  // all activated, wait for orbit trigger
-  showPrompt(currentElement())
-  tracker.start()
+// Called when a model finishes growing and disappears
+function onElementComplete(el) {
+  const nextIdx = SEQUENCE.indexOf(el) + 1
+  if (nextIdx < SEQUENCE.length) {
+    seqIndex = nextIdx
+    showPrompt(currentElement())
+    tracker.start()
+  } else {
+    // All 5 grown — brief pause, then orbit
+    setTimeout(activateFinalState, 1200)
+  }
 }
 
 // ── Final orbit state ─────────────────────────────────────────
@@ -190,7 +199,6 @@ function activateFinalState() {
   hidePalmRing()
   tracker.stop()
 
-  // Arrange models in a ring inside orbitGroup
   SEQUENCE.forEach((el, i) => {
     const angle  = (i / SEQUENCE.length) * Math.PI * 2
     const anchor = tree.getAnchor(el)
@@ -201,7 +209,6 @@ function activateFinalState() {
     anchor.scale.setScalar(ORBIT_SCALE)
     anchor.visible = true
 
-    // Restart particles
     const worldPos = new THREE.Vector3()
     anchor.getWorldPosition(worldPos)
     particles[el].start(el, worldPos)
@@ -250,18 +257,15 @@ tracker.addEventListener('gesture-confirmed', (e) => {
   const { element } = e.detail
   if (element !== currentElement()) return
 
-  hidePalmRing()
-  hidePrompt()
   tracker.stop()
+  hidePrompt()
+  hidePalmRing()
 
-  const { x, y } = CARDINAL_NDC[element]
-  const worldPos  = ndcToWorld(x, y)
+  const worldPos = cardinalWorldPos(element)
   tree.place(element, worldPos)
   particles[element].start(element, worldPos)
   sound.triggerPlacement()
-
-  // Show next gesture after seed sprouts
-  setTimeout(advanceSequence, SEED_HOLD_MS + 400)
+  // Next prompt shows only after this model fully grows and disappears
 })
 
 // ── Start AR ──────────────────────────────────────────────────
@@ -343,10 +347,8 @@ renderer.setAnimationLoop(() => {
   if (video.readyState >= 2) tracker.detect(video, performance.now())
 
   if (allComplete) {
-    // Slow auto-rotation of the orbit
     orbitGroup.rotation.y += 0.004
 
-    // Particles follow their orbiting model
     for (const el of SEQUENCE) {
       const anchor = tree.getAnchor(el)
       const worldPos = new THREE.Vector3()
@@ -362,15 +364,10 @@ renderer.setAnimationLoop(() => {
       if (progress < 1) {
         particles[el].update(progress, delta)
       } else if (!completedEls.has(el)) {
-        // Model fully grown — hide it and stop its particles
         completedEls.add(el)
         particles[el].stop()
         tree.getAnchor(el).visible = false
-
-        if (completedEls.size === SEQUENCE.length) {
-          // All 5 done — brief pause then orbit
-          setTimeout(activateFinalState, 1200)
-        }
+        onElementComplete(el)
       }
     }
   }
