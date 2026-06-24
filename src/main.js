@@ -89,15 +89,24 @@ let arStarted = false
 
 // ── Guide screen → orb screen ─────────────────────────────────
 const guideScreen = document.getElementById('guide-screen')
-guideScreen.addEventListener('click', () => {
+function dismissGuide(e) {
+  e.preventDefault()
   guideScreen.classList.add('hidden')
-})
+  guideScreen.addEventListener('transitionend', () => {
+    guideScreen.style.display = 'none'
+  }, { once: true })
+}
+guideScreen.addEventListener('click', dismissGuide)
+guideScreen.addEventListener('touchend', dismissGuide)
 
 // ── Orb click ─────────────────────────────────────────────────
 document.querySelectorAll('.el-circle').forEach((el) => {
-  el.addEventListener('click', () => {
+  function startFromOrb(e) {
+    e.preventDefault()
     if (!arStarted) { arStarted = true; startAR() }
-  })
+  }
+  el.addEventListener('click', startFromOrb)
+  el.addEventListener('touchend', startFromOrb)
 })
 
 // ── AR modules ────────────────────────────────────────────────
