@@ -1,45 +1,88 @@
-import * as Tone from 'tone'
+// Three sound layers for three collaborators.
+// Each layer is independently controllable so each artist can own one.
+//
+// Layer A (lead):    drone / root tone — triggered on placement
+// Layer B (texture): granular / field recording — fades in during growth
+// Layer C (event):   one-shot accent sounds — triggered at full scale
+//
+// To add sound: assign an AudioBuffer to the matching slot in load().
 
 export class SoundEngine {
   constructor() {
+    this._ctx = null
+    this._masterGain = null
+    this._layers = { A: null, B: null, C: null }
     this._ready = false
-    this._synth = null
-    this._loop = null
   }
 
   async init() {
-    if (this._ready) return
-    await Tone.start()
+    this._ctx = new (window.AudioContext || window.webkitAudioContext)()
+    this._masterGain = this._ctx.createGain()
+    this._masterGain.gain.value = 0.8
+    this._masterGain.connect(this._ctx.destination)
     this._ready = true
-
-    const reverb = new Tone.Reverb({ decay: 6, wet: 0.7 }).toDestination()
-    const chorus = new Tone.Chorus(0.5, 3, 0.4).connect(reverb)
-    chorus.start()
-
-    this._synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'sine' },
-      envelope: { attack: 1.5, decay: 1, sustain: 0.8, release: 3 },
-      volume: -14,
-    }).connect(chorus)
-
-    const notes = ['C3', 'G3', 'D4', 'A4', 'E4']
-    let i = 0
-    this._loop = new Tone.Loop((time) => {
-      this._synth.triggerAttackRelease(notes[i % notes.length], '4n', time)
-      i++
-    }, '2n')
+    return this
   }
 
-  play() {
-    if (!this._ready) return
-    Tone.getTransport().start()
-    this._loop.start(0)
+  // Load an audio file into a layer slot.
+  // layer: 'A' | 'B' | 'C'
+  async loadLayer(layer, url) {
+    if (!this._ready) throw new Error('Call init() first')
+    const res = await fetch(url)
+    const buf = await this._ctx.decodeAudioData(await res.arrayBuffer())
+    this._layers[layer] = buf
   }
 
-  stop() {
-    if (!this._ready) return
-    this._loop.stop()
-    this._synth.releaseAll()
-    Tone.getTransport().stop()
+  // Play layer A (drone) — call on placement confirmed
+  triggerPlacement() {
+    this._playLayer('A', { loop: true, fadeIn: 1.5 })
   }
+
+  // Fade in layer B as growth progresses (0–1)
+  setGrowthProgress(t) {
+    if (!this._ready || !this._layers.B) return
+    if (!this._layerBNode) {
+      this._layerBNode = this._startLoop('B')
+      this._layerBGain = this._layerBNode._gain
+      this._layerBGain.gain.value = 0
+    }
+    this._layerBGain.gain.setTargetAtTime(t, this._ctx.currentTime, 0.3)
+  }
+
+  // One-shot accent when fully grown — call on growth complete
+  triggerFullGrown() {
+    this._playLayer('C', { loop: false })
+  }
+
+  stopAll() {
+    [this._layerANode, this._layerBNode, this._layerCNode].forEach((n) => {
+      if (n) try { n.stop() } catch {}
+    })
+    this._layerBNode = null
+    this._layerBGain = null
+  }
+
+  _playLayer(id, { loop = false, fadeIn = 0 } = {}) {
+    if (!this._ready || !this._layers[id]) return
+    const node = this._ctx.createBufferSource()
+    node.buffer = this._layers[id]
+    node.loop = loop
+
+    const gain = this._ctx.createGain()
+    gain.gain.value = fadeIn > 0 ? 0 : 1
+    if (fadeIn > 0) gain.gain.linearRampToValueAtTime(1, this._ctx.currentTime + fadeIn)
+
+    node._gain = gain
+    node.connect(gain).connect(this._masterGain)
+    node.start()
+
+    this[`_layer${id}Node`] = node
+    return node
+  }
+
+  _startLoop(id) {
+    return this._playLayer(id, { loop: true })
+  }
+
+  get context() { return this._ctx }
 }

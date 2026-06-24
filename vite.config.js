@@ -7,7 +7,10 @@ export default defineConfig({
     assetsDir: 'assets',
   },
   server: {
-    https: true,  // WebXR requires HTTPS even on localhost
-    host: true,
+    https: true,   // camera + MediaPipe require HTTPS even on localhost
+    host: true,    // expose to LAN so you can test on phone directly
+  },
+  optimizeDeps: {
+    exclude: ['@mediapipe/tasks-vision'],
   },
 })

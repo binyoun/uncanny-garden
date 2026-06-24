@@ -8,68 +8,360 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #0a0a0f;
+      background: #000;
       overflow: hidden;
-      font-family: 'Courier New', monospace;
+      font-family: system-ui, sans-serif;
       color: #fff;
     }
 
-    canvas { display: block; }
-
-    #start {
+    #canvas {
       position: fixed;
       inset: 0;
+      z-index: 1;
+    }
+
+    #camera-feed {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+    }
+
+    /* ── guide screen ── */
+    #guide-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 11;
+      background: rgba(0, 0, 0, 0.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 52px;
+      transition: opacity 0.8s ease;
+    }
+    #guide-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #gesture-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .gesture-row {
+      display: flex;
+      align-items: baseline;
+      gap: 28px;
+    }
+    .g-element {
+      font-size: 0.78rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      min-width: 90px;
+      text-align: right;
+    }
+    .g-desc {
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      opacity: 0.45;
+      min-width: 100px;
+    }
+
+    #guide-hint {
+      font-size: 0.58rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      opacity: 0.28;
+    }
+
+    /* ── orb screen ── */
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.72);
+    }
+
+    #instruction {
+      position: absolute;
+      top: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.62rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      opacity: 0.35;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* ── orb stage ── */
+    #orb-stage {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .orb-float {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .float-water { left: 50%;  top: 16%; animation: drift-water 11s ease-in-out infinite; }
+    .float-metal { left: 17%;  top: 50%; animation: drift-metal 13s ease-in-out infinite; }
+    .float-earth { left: 50%;  top: 53%; animation: drift-earth  9s ease-in-out infinite; }
+    .float-wood  { left: 83%;  top: 50%; animation: drift-wood  12s ease-in-out infinite; }
+    .float-fire  { left: 50%;  top: 77%; animation: drift-fire  10s ease-in-out infinite; }
+
+    @keyframes drift-water {
+      0%, 100% { transform: translate(-50%, -50%) translate(  0px,   0px); }
+      30%       { transform: translate(-50%, -50%) translate( -6px, -10px); }
+      68%       { transform: translate(-50%, -50%) translate(  5px,   6px); }
+    }
+    @keyframes drift-metal {
+      0%, 100% { transform: translate(-50%, -50%) translate(  0px,  0px); }
+      38%       { transform: translate(-50%, -50%) translate(  9px, -7px); }
+      72%       { transform: translate(-50%, -50%) translate( -5px,  9px); }
+    }
+    @keyframes drift-earth {
+      0%, 100% { transform: translate(-50%, -50%) translate(  0px,  0px); }
+      33%       { transform: translate(-50%, -50%) translate( -5px,  7px); }
+      66%       { transform: translate(-50%, -50%) translate(  6px, -5px); }
+    }
+    @keyframes drift-wood {
+      0%, 100% { transform: translate(-50%, -50%) translate(  0px,  0px); }
+      42%       { transform: translate(-50%, -50%) translate( -8px, -7px); }
+      78%       { transform: translate(-50%, -50%) translate(  5px,  8px); }
+    }
+    @keyframes drift-fire {
+      0%, 100% { transform: translate(-50%, -50%) translate(  0px,   0px); }
+      27%       { transform: translate(-50%, -50%) translate(  6px, -10px); }
+      62%       { transform: translate(-50%, -50%) translate( -6px,   6px); }
+    }
+
+    @keyframes orb-pulse {
+      0%, 100% { opacity: 0.82; }
+      50%       { opacity: 1.00; }
+    }
+
+    .el-circle {
+      width: min(72px, 21vw);
+      height: min(72px, 21vw);
+      border-radius: 50%;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0,0,0,0.72);
-      z-index: 20;
-      cursor: pointer;
+      animation: orb-pulse 3.5s ease-in-out infinite;
+      transition: transform 0.2s ease, filter 0.2s ease;
+      pointer-events: all;
+    }
+    .el-circle:hover  { transform: scale(1.14); filter: brightness(1.25); }
+    .el-circle.active { transform: scale(1.4);  filter: brightness(1.7);  animation-play-state: paused; }
+
+    .el-fire  { animation-delay: -0.6s; }
+    .el-earth { animation-delay: -1.2s; }
+    .el-metal { animation-delay: -1.8s; }
+    .el-water { animation-delay: -2.4s; }
+
+    .el-circle span {
+      font-size: min(1.3rem, 4.5vw);
+      font-weight: 100;
+      color: rgba(255,255,255,0.70);
+      line-height: 1;
+      user-select: none;
+      pointer-events: none;
     }
 
-    #start span {
-      font-size: 0.7rem;
-      letter-spacing: 0.35em;
-      color: rgba(255,255,255,0.6);
-      text-transform: uppercase;
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 0.9rem 2rem;
+    .el-wood {
+      background: radial-gradient(circle at 50% 45%,
+        rgba(255,255,255,1.00)  0%, rgba(120,255,150,0.92) 16%,
+        rgba(0,204,68,0.68)    40%, rgba(0,204,68,0.08)    65%,
+        rgba(0,204,68,0)       78%);
+      box-shadow:
+        0 0 8px  4px  rgba(0,204,68,1.00),
+        0 0 22px 11px rgba(0,204,68,0.68),
+        0 0 50px 25px rgba(0,204,68,0.38),
+        0 0 90px 45px rgba(0,204,68,0.14);
+    }
+    .el-fire {
+      background: radial-gradient(circle at 50% 45%,
+        rgba(255,255,255,1.00)  0%, rgba(255,140,90,0.92)  16%,
+        rgba(255,34,0,0.68)    40%, rgba(255,34,0,0.08)    65%,
+        rgba(255,34,0,0)       78%);
+      box-shadow:
+        0 0 8px  4px  rgba(255,34,0,1.00),
+        0 0 22px 11px rgba(255,34,0,0.68),
+        0 0 50px 25px rgba(255,34,0,0.38),
+        0 0 90px 45px rgba(255,34,0,0.14);
+    }
+    .el-earth {
+      background: radial-gradient(circle at 50% 45%,
+        rgba(255,255,255,1.00)  0%, rgba(255,245,100,0.92) 16%,
+        rgba(255,204,0,0.68)   40%, rgba(255,204,0,0.08)   65%,
+        rgba(255,204,0,0)      78%);
+      box-shadow:
+        0 0 8px  4px  rgba(255,204,0,1.00),
+        0 0 22px 11px rgba(255,204,0,0.68),
+        0 0 50px 25px rgba(255,204,0,0.38),
+        0 0 90px 45px rgba(255,204,0,0.14);
+    }
+    .el-metal {
+      background: radial-gradient(circle at 50% 45%,
+        rgba(255,255,255,1.00)  0%, rgba(220,220,220,0.92) 16%,
+        rgba(180,180,180,0.68) 40%, rgba(180,180,180,0.08) 65%,
+        rgba(180,180,180,0)    78%);
+      box-shadow:
+        0 0 8px  4px  rgba(200,200,200,1.00),
+        0 0 22px 11px rgba(200,200,200,0.68),
+        0 0 50px 25px rgba(200,200,200,0.38),
+        0 0 90px 45px rgba(200,200,200,0.14);
+    }
+    .el-water {
+      background: radial-gradient(circle at 50% 45%,
+        rgba(255,255,255,1.00)  0%, rgba(90,168,255,0.92)  16%,
+        rgba(0,102,255,0.68)   40%, rgba(0,102,255,0.08)   65%,
+        rgba(0,102,255,0)      78%);
+      box-shadow:
+        0 0 8px  4px  rgba(0,102,255,1.00),
+        0 0 22px 11px rgba(0,102,255,0.68),
+        0 0 50px 25px rgba(0,102,255,0.38),
+        0 0 90px 45px rgba(0,102,255,0.14);
     }
 
-    #status {
+    /* ── HUD ── */
+    #hud {
       position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 0.65rem;
-      letter-spacing: 0.25em;
-      color: rgba(255,255,255,0.45);
-      text-transform: uppercase;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
       display: none;
-      z-index: 10;
     }
 
     #hint {
-      position: fixed;
-      bottom: 2.5rem;
+      position: absolute;
+      bottom: 60px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 0.6rem;
-      letter-spacing: 0.3em;
-      color: rgba(255,255,255,0.35);
-      text-transform: uppercase;
-      opacity: 0;
-      transition: opacity 1s;
-      pointer-events: none;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      opacity: 0.75;
+      text-align: center;
       white-space: nowrap;
-      z-index: 10;
+    }
+
+    #palm-ring {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      transform: translate(-50%, -50%);
+      display: none;
+      pointer-events: none;
+    }
+
+    #palm-ring svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    #palm-ring circle.track {
+      fill: none;
+      stroke: rgba(255,255,255,0.2);
+      stroke-width: 3;
+    }
+
+    #palm-ring circle.progress {
+      fill: none;
+      stroke: #fff;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-dasharray: 220;
+      stroke-dashoffset: 220;
+      transition: stroke-dashoffset 0.05s linear;
+    }
+
+    #status {
+      position: absolute;
+      top: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      opacity: 0.5;
     }
   </style>
 </head>
 <body>
-  <div id="start"><span>Touch to Begin</span></div>
-  <div id="status">Loading…</div>
-  <div id="hint">Tap model · Drag to orbit</div>
+
+  <video id="camera-feed" playsinline autoplay muted></video>
+  <canvas id="canvas"></canvas>
+
+  <!-- Screen 1: gesture guide -->
+  <div id="guide-screen">
+    <div id="gesture-list">
+      <div class="gesture-row">
+        <span class="g-element" style="color:#00cc44">Wood 목</span>
+        <span class="g-desc">open palm</span>
+      </div>
+      <div class="gesture-row">
+        <span class="g-element" style="color:#ff2200">Fire 화</span>
+        <span class="g-desc">point up</span>
+      </div>
+      <div class="gesture-row">
+        <span class="g-element" style="color:#ffcc00">Earth 토</span>
+        <span class="g-desc">closed fist</span>
+      </div>
+      <div class="gesture-row">
+        <span class="g-element" style="color:#cccccc">Metal 금</span>
+        <span class="g-desc">peace sign</span>
+      </div>
+      <div class="gesture-row">
+        <span class="g-element" style="color:#0066ff">Water 수</span>
+        <span class="g-desc">ok ring</span>
+      </div>
+    </div>
+    <p id="guide-hint">tap to continue</p>
+  </div>
+
+  <!-- Screen 2: orb selection -->
+  <div id="start-screen">
+    <p id="instruction">tap your element</p>
+    <div id="orb-stage">
+      <div class="orb-float float-water">
+        <div class="el-circle el-water" data-element="water"><span>↑</span></div>
+      </div>
+      <div class="orb-float float-metal">
+        <div class="el-circle el-metal" data-element="metal"><span>←</span></div>
+      </div>
+      <div class="orb-float float-earth">
+        <div class="el-circle el-earth" data-element="earth"><span>⊕</span></div>
+      </div>
+      <div class="orb-float float-wood">
+        <div class="el-circle el-wood" data-element="wood"><span>→</span></div>
+      </div>
+      <div class="orb-float float-fire">
+        <div class="el-circle el-fire" data-element="fire"><span>↓</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div id="status"></div>
+    <div id="hint">Show a gesture</div>
+    <div id="palm-ring">
+      <svg viewBox="0 0 80 80">
+        <circle class="track"    cx="40" cy="40" r="35" />
+        <circle class="progress" cx="40" cy="40" r="35" />
+      </svg>
+    </div>
+  </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
