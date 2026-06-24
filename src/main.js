@@ -305,10 +305,10 @@ renderer.setAnimationLoop(() => {
   // Update all growing models
   const progressMap = tree.update()
 
-  // Update particles for active (not-yet-complete) models during growth
+  // Update particles for each placed model during its growth
   if (!allComplete) {
     for (const [el, progress] of Object.entries(progressMap)) {
-      if (progress > 0 && progress < 1) {
+      if (progress < 1) {
         particles[el].update(progress, delta)
       }
     }
