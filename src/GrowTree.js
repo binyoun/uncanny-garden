@@ -29,9 +29,12 @@ export class GrowTree {
     this._state  = {}
   }
 
-  async load(paths) {
-    await Promise.all(
-      Object.entries(paths).map(([el, path]) => this._loadOne(el, path))
+  // onEach(element) fires as each model finishes — lets caller track progress.
+  load(paths, onEach) {
+    return Promise.all(
+      Object.entries(paths).map(([el, path]) =>
+        this._loadOne(el, path).then(() => { if (onEach) onEach(el) })
+      )
     )
   }
 

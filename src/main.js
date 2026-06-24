@@ -264,47 +264,19 @@ tracker.addEventListener('gesture-confirmed', (e) => {
   const worldPos = cardinalWorldPos(element)
   tree.place(element, worldPos)
   particles[element].start(element, worldPos)
-  sound.triggerPlacement()
+  ensureSound().then(() => sound.triggerPlacement())
   // Next prompt shows only after this model fully grows and disappears
 })
 
-// ── Start AR ──────────────────────────────────────────────────
-let arStarted = false
+// ── Auto-start logic ──────────────────────────────────────────
+let trackerReady  = false
+let loadedCount   = 0
+let arEntered     = false
+const MIN_MODELS  = 3
 
-async function startAR() {
-  if (arStarted) return
-  arStarted = true
-
-  loadingLabel.textContent = 'Loading...'
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-      audio: false,
-    })
-    video.srcObject = stream
-    await video.play()
-  } catch (err) {
-    console.warn('Camera denied:', err)
-  }
-
-  await sound.init()
-
-  try {
-    await tree.load({
-      wood:  `${BASE}models/tree.glb`,
-      fire:  `${BASE}models/fire.glb`,
-      earth: `${BASE}models/earth.glb`,
-      metal: `${BASE}models/metal.glb`,
-      water: `${BASE}models/water.glb`,
-    })
-  } catch (err) {
-    console.error('GLB failed:', err)
-    loadingLabel.textContent = 'Models missing'
-    return
-  }
-
-  await tracker.init()
+function maybeEnterAR() {
+  if (arEntered || !trackerReady || loadedCount < MIN_MODELS) return
+  arEntered = true
 
   introActive = false
   landing.classList.add('hidden')
@@ -318,12 +290,51 @@ async function startAR() {
   tracker.start()
 }
 
-function onLandingTap(e) {
-  e.preventDefault()
-  startAR()
+// Sound requires a user gesture on iOS — init lazily on first touch
+let soundReady = false
+async function ensureSound() {
+  if (soundReady) return
+  soundReady = true
+  await sound.init()
 }
-landing.addEventListener('touchend', onLandingTap)
-landing.addEventListener('click',    onLandingTap)
+window.addEventListener('touchstart', ensureSound, { once: true })
+window.addEventListener('mousedown',  ensureSound, { once: true })
+
+// ── Initialise everything on page load ────────────────────────
+;(async () => {
+  // Camera — video getUserMedia doesn't require a user gesture
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+      audio: false,
+    })
+    video.srcObject = stream
+    video.play()
+  } catch (err) {
+    console.warn('Camera denied:', err)
+  }
+
+  // Tracker and models load in parallel; enter AR when both conditions met
+  tracker.init().then(() => {
+    trackerReady = true
+    maybeEnterAR()
+  })
+
+  tree.load(
+    {
+      wood:  `${BASE}models/tree.glb`,
+      fire:  `${BASE}models/fire.glb`,
+      earth: `${BASE}models/earth.glb`,
+      metal: `${BASE}models/metal.glb`,
+      water: `${BASE}models/water.glb`,
+    },
+    () => {
+      loadedCount++
+      loadingLabel.textContent = `${loadedCount} / 5`
+      maybeEnterAR()
+    }
+  )
+})()
 
 // ── Render loop ───────────────────────────────────────────────
 const clock = new THREE.Clock()
