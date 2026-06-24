@@ -112,6 +112,8 @@ export class ParticleSystem {
     this._geo.attributes.position.needsUpdate = true
   }
 
+  setOrigin(pos) { this._origin.copy(pos) }
+
   stop() {
     this._active         = false
     this._points.visible = false

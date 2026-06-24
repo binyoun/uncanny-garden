@@ -35,7 +35,7 @@ scene.add(sun)
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 200)
 camera.position.set(0, 0, 0)
 
-// ── Intro scene (hair model behind landing) ───────────────────
+// ── Intro scene ───────────────────────────────────────────────
 const introScene  = new THREE.Scene()
 introScene.environment = envTexture
 const introCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100)
@@ -87,7 +87,7 @@ const ELEMENT_INFO = {
   water: { label: 'Water 수', gesture: 'ok ring',     color: '#0066ff' },
 }
 
-// Wu Xing cardinal NDC positions (x: -1→1 left→right, y: -1→1 bottom→top)
+// Wu Xing cardinal NDC positions
 const CARDINAL_NDC = {
   wood:  { x:  0.45, y:  0.0  },  // East
   fire:  { x:  0.0,  y: -0.38 },  // South
@@ -108,9 +108,14 @@ const tracker = new HandTracker()
 const tree    = new GrowTree(scene)
 const sound   = new SoundEngine()
 
-// One particle system per element
 const particles = {}
 for (const el of SEQUENCE) particles[el] = new ParticleSystem(scene)
+
+// ── Orbit group (used in final state) ────────────────────────
+const orbitGroup = new THREE.Group()
+orbitGroup.position.set(0, -0.1, -1.5)
+orbitGroup.visible = false
+scene.add(orbitGroup)
 
 // ── Camera feed ───────────────────────────────────────────────
 const video = document.getElementById('camera-feed')
@@ -145,9 +150,7 @@ function showPrompt(element) {
   elementPrompt.classList.remove('hidden')
 }
 
-function hidePrompt() {
-  elementPrompt.classList.add('hidden')
-}
+function hidePrompt() { elementPrompt.classList.add('hidden') }
 
 function updatePalmRing(palm, progress, element) {
   const x = (1 - palm.x) * window.innerWidth
@@ -163,38 +166,79 @@ function updatePalmRing(palm, progress, element) {
 function hidePalmRing() { palmRing.style.display = 'none' }
 
 // ── Sequence state ────────────────────────────────────────────
-let seqIndex    = 0   // index into SEQUENCE
-let seqActive   = false
-let allComplete = false
+let seqIndex         = 0
+let seqActive        = false
+let allComplete      = false
+const completedEls   = new Set()
 
 function currentElement() { return SEQUENCE[seqIndex] }
 
 function advanceSequence() {
   seqIndex++
-  if (seqIndex >= SEQUENCE.length) {
-    activateFinalState()
-    return
-  }
+  if (seqIndex >= SEQUENCE.length) return  // all activated, wait for orbit trigger
   showPrompt(currentElement())
   tracker.start()
 }
+
+// ── Final orbit state ─────────────────────────────────────────
+const ORBIT_SCALE  = 0.42
+const ORBIT_RADIUS = 0.65
 
 function activateFinalState() {
   allComplete = true
   hidePrompt()
   hidePalmRing()
-  // Start all particle systems simultaneously at their cardinal positions
-  for (const el of SEQUENCE) {
+  tracker.stop()
+
+  // Arrange models in a ring inside orbitGroup
+  SEQUENCE.forEach((el, i) => {
+    const angle  = (i / SEQUENCE.length) * Math.PI * 2
     const anchor = tree.getAnchor(el)
-    if (anchor) particles[el].start(el, anchor.position)
-  }
+    scene.remove(anchor)
+    orbitGroup.add(anchor)
+    anchor.position.set(Math.cos(angle) * ORBIT_RADIUS, 0, Math.sin(angle) * ORBIT_RADIUS)
+    anchor.rotation.set(0, 0, 0)
+    anchor.scale.setScalar(ORBIT_SCALE)
+    anchor.visible = true
+
+    // Restart particles
+    const worldPos = new THREE.Vector3()
+    anchor.getWorldPosition(worldPos)
+    particles[el].start(el, worldPos)
+  })
+
+  orbitGroup.visible = true
   sound.triggerFullGrown()
+  startOrbitDrag()
+}
+
+// ── Drag to rotate orbit ──────────────────────────────────────
+function startOrbitDrag() {
+  let prevX = 0
+
+  renderer.domElement.addEventListener('touchstart', (e) => {
+    prevX = e.touches[0].clientX
+  }, { passive: true })
+
+  renderer.domElement.addEventListener('touchmove', (e) => {
+    orbitGroup.rotation.y += (e.touches[0].clientX - prevX) * 0.007
+    prevX = e.touches[0].clientX
+  }, { passive: true })
+
+  let mouseDown = false
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    mouseDown = true; prevX = e.clientX
+  })
+  renderer.domElement.addEventListener('mouseup',  () => { mouseDown = false })
+  renderer.domElement.addEventListener('mousemove', (e) => {
+    if (!mouseDown) return
+    orbitGroup.rotation.y += (e.clientX - prevX) * 0.007
+    prevX = e.clientX
+  })
 }
 
 // ── Hand tracker events ───────────────────────────────────────
-tracker.addEventListener('hand-lost', () => {
-  hidePalmRing()
-})
+tracker.addEventListener('hand-lost', () => { hidePalmRing() })
 
 tracker.addEventListener('hold-progress', (e) => {
   const { progress, palm, element } = e.detail
@@ -203,8 +247,8 @@ tracker.addEventListener('hold-progress', (e) => {
 })
 
 tracker.addEventListener('gesture-confirmed', (e) => {
-  const { element, palm } = e.detail
-  if (element !== currentElement()) return  // only accept the expected gesture
+  const { element } = e.detail
+  if (element !== currentElement()) return
 
   hidePalmRing()
   hidePrompt()
@@ -216,11 +260,11 @@ tracker.addEventListener('gesture-confirmed', (e) => {
   particles[element].start(element, worldPos)
   sound.triggerPlacement()
 
-  // Advance to next element after seed phase
-  setTimeout(advanceSequence, SEED_HOLD_MS + 500)
+  // Show next gesture after seed sprouts
+  setTimeout(advanceSequence, SEED_HOLD_MS + 400)
 })
 
-// ── Start AR (called on landing tap) ─────────────────────────
+// ── Start AR ──────────────────────────────────────────────────
 let arStarted = false
 
 async function startAR() {
@@ -258,7 +302,6 @@ async function startAR() {
 
   await tracker.init()
 
-  // Dismiss landing and enter AR
   introActive = false
   landing.classList.add('hidden')
   landing.addEventListener('transitionend', () => {
@@ -271,7 +314,6 @@ async function startAR() {
   tracker.start()
 }
 
-// Landing tap triggers AR start
 function onLandingTap(e) {
   e.preventDefault()
   startAR()
@@ -298,24 +340,38 @@ renderer.setAnimationLoop(() => {
 
   const delta = clock.getDelta()
 
-  if (video.readyState >= 2) {
-    tracker.detect(video, performance.now())
-  }
+  if (video.readyState >= 2) tracker.detect(video, performance.now())
 
-  // Update all growing models
-  const progressMap = tree.update()
+  if (allComplete) {
+    // Slow auto-rotation of the orbit
+    orbitGroup.rotation.y += 0.004
 
-  // Update particles for each placed model during its growth
-  if (!allComplete) {
+    // Particles follow their orbiting model
+    for (const el of SEQUENCE) {
+      const anchor = tree.getAnchor(el)
+      const worldPos = new THREE.Vector3()
+      anchor.getWorldPosition(worldPos)
+      particles[el].setOrigin(worldPos)
+      particles[el].update(0.5, delta)
+    }
+
+  } else {
+    const progressMap = tree.update()
+
     for (const [el, progress] of Object.entries(progressMap)) {
       if (progress < 1) {
         particles[el].update(progress, delta)
+      } else if (!completedEls.has(el)) {
+        // Model fully grown — hide it and stop its particles
+        completedEls.add(el)
+        particles[el].stop()
+        tree.getAnchor(el).visible = false
+
+        if (completedEls.size === SEQUENCE.length) {
+          // All 5 done — brief pause then orbit
+          setTimeout(activateFinalState, 1200)
+        }
       }
-    }
-  } else {
-    // Final state: all particle systems run continuously
-    for (const el of SEQUENCE) {
-      particles[el].update(1, delta)
     }
   }
 
