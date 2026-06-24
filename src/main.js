@@ -49,9 +49,12 @@ const introFill = new THREE.DirectionalLight(0xddeeff, 0.5)
 introFill.position.set(-2, 0, 1)
 introScene.add(introFill)
 
-let introModel  = null
-let introActive = true
-const introClock = new THREE.Clock()
+let introModel    = null
+let introActive   = true
+let introRotY     = 0   // accumulated y rotation — driven by auto or drag
+let introDragging = false
+let introDragPrevX = 0
+const introClock  = new THREE.Clock()
 
 const introLoader = new GLTFLoader()
 introLoader.setMeshoptDecoder(MeshoptDecoder)
@@ -269,13 +272,20 @@ tracker.addEventListener('gesture-confirmed', (e) => {
 })
 
 // ── Auto-start logic ──────────────────────────────────────────
-let trackerReady  = false
-let loadedCount   = 0
-let arEntered     = false
-const MIN_MODELS  = 3
+let trackerReady   = false
+let loadedCount    = 0
+let arEntered      = false
+const MIN_MODELS   = 3
+const LANDING_MIN_MS = 4000
+const pageLoadTime = Date.now()
 
 function maybeEnterAR() {
   if (arEntered || !trackerReady || loadedCount < MIN_MODELS) return
+  const elapsed = Date.now() - pageLoadTime
+  if (elapsed < LANDING_MIN_MS) {
+    setTimeout(maybeEnterAR, LANDING_MIN_MS - elapsed)
+    return
+  }
   arEntered = true
 
   introActive = false
@@ -299,6 +309,33 @@ async function ensureSound() {
 }
 window.addEventListener('touchstart', ensureSound, { once: true })
 window.addEventListener('mousedown',  ensureSound, { once: true })
+
+// ── Landing model drag ────────────────────────────────────────
+canvas.addEventListener('touchstart', (e) => {
+  if (!introActive) return
+  introDragging  = true
+  introDragPrevX = e.touches[0].clientX
+}, { passive: true })
+
+canvas.addEventListener('touchmove', (e) => {
+  if (!introActive || !introDragging || !introModel) return
+  introRotY     += (e.touches[0].clientX - introDragPrevX) * 0.012
+  introDragPrevX = e.touches[0].clientX
+}, { passive: true })
+
+canvas.addEventListener('touchend', () => { introDragging = false })
+
+let mouseDown = false
+canvas.addEventListener('mousedown', (e) => {
+  if (!introActive) return
+  mouseDown = true; introDragPrevX = e.clientX
+})
+canvas.addEventListener('mouseup',   () => { mouseDown = false })
+canvas.addEventListener('mousemove', (e) => {
+  if (!introActive || !mouseDown || !introModel) return
+  introRotY     += (e.clientX - introDragPrevX) * 0.012
+  introDragPrevX = e.clientX
+})
 
 // ── Initialise everything on page load ────────────────────────
 ;(async () => {
@@ -343,9 +380,10 @@ renderer.setAnimationLoop(() => {
   if (introActive) {
     if (introModel) {
       const t = introClock.getElapsedTime()
-      introModel.rotation.y  = t * 0.22
-      introModel.rotation.x  = Math.sin(t * 0.28) * 0.12
-      introModel.position.y += Math.sin(t * 0.55) * 0.0008
+      if (!introDragging) introRotY += 0.014   // auto-rotate (~50°/s at 60fps)
+      introModel.rotation.y = introRotY
+      introModel.rotation.x = Math.sin(t * 0.28) * 0.12
+      introModel.position.y = Math.sin(t * 0.55) * 0.06
     }
     renderer.render(introScene, introCamera)
     return
