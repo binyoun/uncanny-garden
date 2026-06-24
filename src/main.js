@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { HandTracker } from './HandTracker.js'
-import { GrowTree } from './GrowTree.js'
+import { GrowTree, SEED_HOLD_MS } from './GrowTree.js'
 import { ParticleSystem } from './ParticleSystem.js'
 import { SoundEngine } from './SoundEngine.js'
 
@@ -35,7 +35,7 @@ scene.add(sun)
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 200)
 camera.position.set(0, 0, 0)
 
-// ── Intro scene (hair model behind start screen) ──────────────
+// ── Intro scene (hair model behind landing) ───────────────────
 const introScene  = new THREE.Scene()
 introScene.environment = envTexture
 const introCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100)
@@ -76,63 +76,58 @@ introLoader.load(
   (err) => console.warn('Intro model failed:', err)
 )
 
-// ── Element info ──────────────────────────────────────────────
+// ── Element definitions ───────────────────────────────────────
+const SEQUENCE = ['wood', 'fire', 'earth', 'metal', 'water']
+
 const ELEMENT_INFO = {
-  wood:  { label: 'Wood 목',  emoji: '✋', color: '#00cc44' },
-  fire:  { label: 'Fire 화',  emoji: '☝️', color: '#ff2200' },
-  earth: { label: 'Earth 토', emoji: '✊', color: '#ffcc00' },
-  metal: { label: 'Metal 금', emoji: '✌️', color: '#cccccc' },
-  water: { label: 'Water 수', emoji: '👌', color: '#0066ff' },
+  wood:  { label: 'Wood 목',  gesture: 'open palm',   color: '#00cc44' },
+  fire:  { label: 'Fire 화',  gesture: 'point up',    color: '#ff2200' },
+  earth: { label: 'Earth 토', gesture: 'closed fist', color: '#ffcc00' },
+  metal: { label: 'Metal 금', gesture: 'peace sign',  color: '#cccccc' },
+  water: { label: 'Water 수', gesture: 'ok ring',     color: '#0066ff' },
 }
 
-let arStarted = false
-
-// ── Guide screen → orb screen ─────────────────────────────────
-const guideScreen = document.getElementById('guide-screen')
-function dismissGuide(e) {
-  e.preventDefault()
-  guideScreen.classList.add('hidden')
-  guideScreen.addEventListener('transitionend', () => {
-    guideScreen.style.display = 'none'
-  }, { once: true })
+// Wu Xing cardinal NDC positions (x: -1→1 left→right, y: -1→1 bottom→top)
+const CARDINAL_NDC = {
+  wood:  { x:  0.45, y:  0.0  },  // East
+  fire:  { x:  0.0,  y: -0.38 },  // South
+  earth: { x:  0.0,  y:  0.0  },  // Center
+  metal: { x: -0.45, y:  0.0  },  // West
+  water: { x:  0.0,  y:  0.38 },  // North
 }
-guideScreen.addEventListener('click', dismissGuide)
-guideScreen.addEventListener('touchend', dismissGuide)
 
-// ── Orb click ─────────────────────────────────────────────────
-document.querySelectorAll('.el-circle').forEach((el) => {
-  function startFromOrb(e) {
-    e.preventDefault()
-    if (!arStarted) { arStarted = true; startAR() }
-  }
-  el.addEventListener('click', startFromOrb)
-  el.addEventListener('touchend', startFromOrb)
-})
+function ndcToWorld(nx, ny, depth = 1.5) {
+  const ndc = new THREE.Vector3(nx, ny, 0.5)
+  ndc.unproject(camera)
+  const dir = ndc.sub(camera.position).normalize()
+  return camera.position.clone().add(dir.multiplyScalar(depth))
+}
 
 // ── AR modules ────────────────────────────────────────────────
-const tracker   = new HandTracker()
-const tree      = new GrowTree(scene)
-const particles = new ParticleSystem(scene)
-const sound     = new SoundEngine()
+const tracker = new HandTracker()
+const tree    = new GrowTree(scene)
+const sound   = new SoundEngine()
+
+// One particle system per element
+const particles = {}
+for (const el of SEQUENCE) particles[el] = new ParticleSystem(scene)
 
 // ── Camera feed ───────────────────────────────────────────────
 const video = document.getElementById('camera-feed')
 
-// ── HUD elements ──────────────────────────────────────────────
-const hud         = document.getElementById('hud')
-const hint        = document.getElementById('hint')
-const statusEl    = document.getElementById('status')
-const palmRing    = document.getElementById('palm-ring')
-const progressArc = palmRing.querySelector('circle.progress')
-const CIRCUMFERENCE = 2 * Math.PI * 35
+// ── Landing ───────────────────────────────────────────────────
+const landing      = document.getElementById('landing')
+const loadingLabel = document.getElementById('loading-label')
 
-const ELEMENT_LABELS = {
-  wood:  'Wood 목',
-  fire:  'Fire 화',
-  earth: 'Earth 토',
-  metal: 'Metal 금',
-  water: 'Water 수',
-}
+// ── HUD ───────────────────────────────────────────────────────
+const hud           = document.getElementById('hud')
+const statusEl      = document.getElementById('status')
+const elementPrompt = document.getElementById('element-prompt')
+const promptElement = document.getElementById('prompt-element')
+const promptGesture = document.getElementById('prompt-gesture')
+const palmRing      = document.getElementById('palm-ring')
+const progressArc   = palmRing.querySelector('circle.progress')
+const CIRCUMFERENCE = 2 * Math.PI * 35
 
 const ELEMENT_RING_COLORS = {
   wood:  '#00cc44',
@@ -142,8 +137,17 @@ const ELEMENT_RING_COLORS = {
   water: '#0066ff',
 }
 
-function setHint(msg)   { hint.textContent = msg }
-function setStatus(msg) { statusEl.textContent = msg }
+function showPrompt(element) {
+  const info = ELEMENT_INFO[element]
+  promptElement.textContent = info.label
+  promptElement.style.color = info.color
+  promptGesture.textContent = info.gesture
+  elementPrompt.classList.remove('hidden')
+}
+
+function hidePrompt() {
+  elementPrompt.classList.add('hidden')
+}
 
 function updatePalmRing(palm, progress, element) {
   const x = (1 - palm.x) * window.innerWidth
@@ -158,97 +162,72 @@ function updatePalmRing(palm, progress, element) {
 
 function hidePalmRing() { palmRing.style.display = 'none' }
 
-// ── Project 2D palm center to 3D world position ───────────────
-function palmToWorld(palm) {
-  const ndc = new THREE.Vector3(
-    (1 - palm.x) * 2 - 1,
-    -palm.y * 2 + 1,
-    0.5
-  )
-  ndc.unproject(camera)
-  const dir = ndc.sub(camera.position).normalize()
-  return camera.position.clone().add(dir.multiplyScalar(1.5))
+// ── Sequence state ────────────────────────────────────────────
+let seqIndex    = 0   // index into SEQUENCE
+let seqActive   = false
+let allComplete = false
+
+function currentElement() { return SEQUENCE[seqIndex] }
+
+function advanceSequence() {
+  seqIndex++
+  if (seqIndex >= SEQUENCE.length) {
+    activateFinalState()
+    return
+  }
+  showPrompt(currentElement())
+  tracker.start()
+}
+
+function activateFinalState() {
+  allComplete = true
+  hidePrompt()
+  hidePalmRing()
+  // Start all particle systems simultaneously at their cardinal positions
+  for (const el of SEQUENCE) {
+    const anchor = tree.getAnchor(el)
+    if (anchor) particles[el].start(el, anchor.position)
+  }
+  sound.triggerFullGrown()
 }
 
 // ── Hand tracker events ───────────────────────────────────────
-tracker.addEventListener('hand-detected', (e) => {
-  const { element } = e.detail
-  setHint(element ? `${ELEMENT_LABELS[element]} — hold still` : 'Show a gesture')
-})
-
 tracker.addEventListener('hand-lost', () => {
   hidePalmRing()
-  setHint('Show a gesture')
 })
 
 tracker.addEventListener('hold-progress', (e) => {
   const { progress, palm, element } = e.detail
+  if (element !== currentElement()) { hidePalmRing(); return }
   updatePalmRing(palm, progress, element)
 })
 
 tracker.addEventListener('gesture-confirmed', (e) => {
   const { element, palm } = e.detail
+  if (element !== currentElement()) return  // only accept the expected gesture
+
   hidePalmRing()
-  setHint(`${ELEMENT_LABELS[element]} awakens...`)
-  setStatus('')
-  const worldPos = palmToWorld(palm)
-  tree.place(worldPos, element)
-  particles.start(element, worldPos)
-  sound.triggerPlacement()
+  hidePrompt()
   tracker.stop()
-  treeGrown      = false
-  exploreStarted = false
+
+  const { x, y } = CARDINAL_NDC[element]
+  const worldPos  = ndcToWorld(x, y)
+  tree.place(element, worldPos)
+  particles[element].start(element, worldPos)
+  sound.triggerPlacement()
+
+  // Advance to next element after seed phase
+  setTimeout(advanceSequence, SEED_HOLD_MS + 500)
 })
 
-// ── Explore mode ──────────────────────────────────────────────
-let listenersAdded = false
+// ── Start AR (called on landing tap) ─────────────────────────
+let arStarted = false
 
-function startExploreMode() {
-  setHint('Drag to explore')
-  if (listenersAdded) return
-  listenersAdded = true
-
-  let prevX = 0, prevY = 0
-
-  renderer.domElement.addEventListener('touchstart', (e) => {
-    prevX = e.touches[0].clientX
-    prevY = e.touches[0].clientY
-  }, { passive: true })
-
-  renderer.domElement.addEventListener('touchmove', (e) => {
-    const dx = e.touches[0].clientX - prevX
-    const dy = e.touches[0].clientY - prevY
-    tree.anchor.rotation.y += dx * 0.007
-    tree.anchor.position.y -= dy * 0.004
-    prevX = e.touches[0].clientX
-    prevY = e.touches[0].clientY
-  }, { passive: true })
-
-  let mouseDown = false
-  renderer.domElement.addEventListener('mousedown', (e) => {
-    mouseDown = true; prevX = e.clientX; prevY = e.clientY
-  })
-  renderer.domElement.addEventListener('mouseup', () => { mouseDown = false })
-  renderer.domElement.addEventListener('mousemove', (e) => {
-    if (!mouseDown) return
-    tree.anchor.rotation.y += (e.clientX - prevX) * 0.007
-    tree.anchor.position.y -= (e.clientY - prevY) * 0.004
-    prevX = e.clientX
-    prevY = e.clientY
-  })
-}
-
-// ── State ─────────────────────────────────────────────────────
-let started        = false
-let treeGrown      = false
-let exploreStarted = false
-
-// ── Start AR ──────────────────────────────────────────────────
 async function startAR() {
-  introActive = false
-  document.getElementById('start-screen').style.display = 'none'
-  hud.style.display = 'block'
-  setStatus('Initializing...')
+  if (arStarted) return
+  arStarted = true
+
+  loadingLabel.textContent = 'Loading...'
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -263,7 +242,6 @@ async function startAR() {
 
   await sound.init()
 
-  setStatus('Loading...')
   try {
     await tree.load({
       wood:  `${BASE}models/tree.glb`,
@@ -274,23 +252,37 @@ async function startAR() {
     })
   } catch (err) {
     console.error('GLB failed:', err)
-    setStatus('Models missing — add GLBs to public/models/')
+    loadingLabel.textContent = 'Models missing'
     return
   }
 
-  setStatus('')
   await tracker.init()
-  tracker.start()
 
-  started = true
-  setHint('Show a gesture')
+  // Dismiss landing and enter AR
+  introActive = false
+  landing.classList.add('hidden')
+  landing.addEventListener('transitionend', () => {
+    landing.style.display = 'none'
+  }, { once: true })
+
+  hud.style.display = 'block'
+  seqActive = true
+  showPrompt(currentElement())
+  tracker.start()
 }
+
+// Landing tap triggers AR start
+function onLandingTap(e) {
+  e.preventDefault()
+  startAR()
+}
+landing.addEventListener('touchend', onLandingTap)
+landing.addEventListener('click',    onLandingTap)
 
 // ── Render loop ───────────────────────────────────────────────
 const clock = new THREE.Clock()
 
 renderer.setAnimationLoop(() => {
-  // Intro: render floating hair model behind start screen
   if (introActive) {
     if (introModel) {
       const t = introClock.getElapsedTime()
@@ -302,7 +294,7 @@ renderer.setAnimationLoop(() => {
     return
   }
 
-  if (!started) return
+  if (!seqActive) return
 
   const delta = clock.getDelta()
 
@@ -310,24 +302,21 @@ renderer.setAnimationLoop(() => {
     tracker.detect(video, performance.now())
   }
 
-  if (tree.anchor.visible) {
-    const progress = tree.update()
-    particles.update(progress, delta)
+  // Update all growing models
+  const progressMap = tree.update()
 
-    if (progress >= 0.5 && !exploreStarted) {
-      exploreStarted = true
-      startExploreMode()
+  // Update particles for active (not-yet-complete) models during growth
+  if (!allComplete) {
+    for (const [el, progress] of Object.entries(progressMap)) {
+      if (progress > 0 && progress < 1) {
+        particles[el].update(progress, delta)
+      }
     }
-
-    if (progress >= 1 && !treeGrown) {
-      treeGrown = true
-      sound.triggerFullGrown()
-      particles.stop()
-      setHint('Drag to explore · Show gesture for new element')
-      tracker.start()
+  } else {
+    // Final state: all particle systems run continuously
+    for (const el of SEQUENCE) {
+      particles[el].update(1, delta)
     }
-
-    sound.setGrowthProgress(progress)
   }
 
   renderer.render(scene, camera)
