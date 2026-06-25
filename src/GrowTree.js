@@ -44,6 +44,7 @@ function getGlowTex() {
 
 function makeOrb(scene, element) {
   // swirling particles — the visual
+  // positions are LOCAL offsets from points.position (set to orb world pos when dormant)
   const positions = new Float32Array(ORB_COUNT * 3)
   const geo       = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -58,6 +59,7 @@ function makeOrb(scene, element) {
     blending: THREE.AdditiveBlending,
   })
   const points = new THREE.Points(geo, mat)
+  points.frustumCulled = false   // bounding sphere is stale until first update; skip culling
   points.visible = false
   scene.add(points)
 
@@ -151,18 +153,18 @@ export class GrowTree {
       }
 
       if (state.phase === 'dormant') {
-        // animate swirling particle orb
+        // animate swirling particle orb — positions are LOCAL to points.position
         const { hit, points, positions, geo } = state.orb
-        const ox = hit.position.x, oy = hit.position.y, oz = hit.position.z
+        points.position.copy(hit.position)   // world position of the orb
         for (let i = 0; i < ORB_COUNT; i++) {
           const ft     = i / ORB_COUNT
           const strand = i % 2
           const angle  = ft * Math.PI * 4 + strand * Math.PI + t_s * 2.0
           const r      = ORB_R * (0.4 + 0.6 * ft)
           const h      = (ft - 0.5) * ORB_H
-          positions[i*3]     = ox + r * Math.cos(angle)
-          positions[i*3 + 1] = oy + h
-          positions[i*3 + 2] = oz + r * Math.sin(angle)
+          positions[i*3]     = r * Math.cos(angle)   // local offset
+          positions[i*3 + 1] = h
+          positions[i*3 + 2] = r * Math.sin(angle)
         }
         geo.attributes.position.needsUpdate = true
         points.material.opacity = 0.6 + 0.35 * Math.sin(t_s * 2.5)
@@ -235,7 +237,7 @@ export class GrowTree {
 
   hideAllOrbs() {
     for (const state of Object.values(this._state)) {
-      if (!state.orb) return
+      if (!state.orb) continue
       state.orb.hit.visible    = false
       state.orb.points.visible = false
     }

@@ -403,7 +403,11 @@ canvas.addEventListener('touchmove', (e) => {
   if (e.touches.length >= 2) {
     const dist = getPinchDist(e)
     if (pinchLastDist > 0) {
-      activeAnchor.position.z += (dist - pinchLastDist) * 0.008
+      // clamp z — must stay negative so model never passes behind the camera
+      activeAnchor.position.z = Math.min(
+        activeAnchor.position.z + (dist - pinchLastDist) * 0.008,
+        -0.08
+      )
     }
     pinchLastDist = dist
   } else if (e.touches.length === 1 && pinchLastDist === 0) {
