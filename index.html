@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Uncanny Garden</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -42,44 +45,61 @@
       pointer-events: none;
     }
 
-    /* Title + direction centered in the screen */
+    /* Title pinned to top */
+    #landing-title {
+      position: absolute;
+      top: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-family: 'Cinzel Decorative', serif;
+      font-size: clamp(1.3rem, 4.5vw, 2.6rem);
+      font-weight: 400;
+      letter-spacing: 0.12em;
+    }
+
+    /* Loading counter — tiny, top-right */
+    #loading-label {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 0.48rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      opacity: 0.28;
+    }
+
+    /* Direction text centered in the screen */
     #landing-center {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 20px;
-    }
-
-    #landing-title {
-      font-size: clamp(2.2rem, 8vw, 4rem);
-      font-weight: 200;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
     }
 
     #landing-desc {
       font-size: clamp(1.05rem, 3.8vw, 1.4rem);
       letter-spacing: 0.06em;
       opacity: 0.88;
-      max-width: 360px;
       text-align: center;
-      line-height: 2.0;
+      line-height: 2.2;
+      min-height: 5em;   /* prevents layout shift while typing */
     }
 
-    #loading-label {
-      position: absolute;
-      top: 28px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 0.72rem;
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
-      opacity: 0.4;
+    /* Blinking cursor for typing effect */
+    .typing-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: #fff;
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: blink 0.75s step-end infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
     }
 
     #landing-credits {
@@ -185,10 +205,10 @@
 
   <!-- Landing -->
   <div id="landing">
+    <h1 id="landing-title">Uncanny Garden</h1>
     <p id="loading-label">loading 0 / 5</p>
     <div id="landing-center">
-      <h1 id="landing-title">Uncanny Garden</h1>
-      <p id="landing-desc">Your Hand Gestures<br>Bloom Five Elemental<br>Flowergirls with Limelight.</p>
+      <p id="landing-desc"></p>
     </div>
     <div id="landing-credits">
       <div>Randi Matushevitz &nbsp;Techspressionist</div>
@@ -214,6 +234,52 @@
       </svg>
     </div>
   </div>
+
+  <script>
+    // Typing effect for landing description
+    const LINES = [
+      'Your Hand Gestures',
+      'Bloom Five Elemental',
+      'Flowergirls with Limelight.',
+    ]
+    const CHAR_DELAY = 65   // ms per character
+    const LINE_PAUSE = 320  // extra pause between lines
+
+    function startTyping() {
+      const el     = document.getElementById('landing-desc')
+      const cursor = document.createElement('span')
+      cursor.className = 'typing-cursor'
+      el.innerHTML = ''
+      el.appendChild(cursor)
+
+      let lineIdx = 0, charIdx = 0
+
+      function typeNext() {
+        if (lineIdx >= LINES.length) {
+          // done — cursor keeps blinking
+          return
+        }
+        const line = LINES[lineIdx]
+        if (charIdx < line.length) {
+          cursor.insertAdjacentText('beforebegin', line[charIdx])
+          charIdx++
+          setTimeout(typeNext, CHAR_DELAY)
+        } else {
+          // end of line
+          lineIdx++
+          charIdx = 0
+          if (lineIdx < LINES.length) {
+            cursor.insertAdjacentHTML('beforebegin', '<br>')
+            setTimeout(typeNext, LINE_PAUSE)
+          }
+        }
+      }
+
+      setTimeout(typeNext, 600)
+    }
+
+    window.addEventListener('DOMContentLoaded', startTyping)
+  </script>
 
   <script type="module" src="/src/main.js"></script>
 </body>
