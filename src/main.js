@@ -73,7 +73,7 @@ introLoader.load(
       -(center.y / max) * 2.4,
       -(center.z / max) * 2.4
     )
-    model.position.y -= 1.1    // sit lower in frame — base for oscillation
+    model.position.y -= 0.5    // sit in lower-center of frame
     introBaseY = model.position.y
     introScene.add(model)
     introModel = model
@@ -281,7 +281,7 @@ let trackerReady   = false
 let loadedCount    = 0
 let arEntered      = false
 const MIN_MODELS   = 3
-const LANDING_MIN_MS = 4000
+const LANDING_MIN_MS = 10000
 const pageLoadTime = Date.now()
 
 function maybeEnterAR() {
@@ -403,7 +403,7 @@ canvas.addEventListener('mousemove', (e) => {
     },
     () => {
       loadedCount++
-      loadingLabel.textContent = `${loadedCount} / 5`
+      loadingLabel.textContent = `loading ${loadedCount} / 5`
       maybeEnterAR()
     }
   )
@@ -416,11 +416,11 @@ renderer.setAnimationLoop(() => {
   if (introActive) {
     if (introModel) {
       const t = introClock.getElapsedTime()
-      if (!introDragging) introRotY += 0.003   // very slow swirl (~11°/s)
+      if (!introDragging) introRotY += 0.005   // slow swirl (~18°/s)
       introModel.rotation.y = introRotY
-      introModel.rotation.x = Math.sin(t * 0.15) * 0.14    // slow gentle lean
-      introModel.rotation.z = Math.sin(t * 0.11 + 0.8) * 0.06  // subtle sway
-      introModel.position.y = introBaseY + Math.sin(t * 0.2) * 0.04  // anchored low, slow breathe
+      introModel.rotation.x = Math.sin(t * 0.18) * 0.2     // lean — shows model depth
+      introModel.rotation.z = Math.sin(t * 0.13 + 0.8) * 0.09  // sway
+      introModel.position.y = introBaseY + Math.sin(t * 0.28) * 0.22  // visible rise and fall
     }
     renderer.render(introScene, introCamera)
     return
