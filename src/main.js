@@ -157,6 +157,7 @@ let _gestureTyper = null
 
 function typeGesture(text) {
   if (_gestureTyper) { clearInterval(_gestureTyper); _gestureTyper = null }
+  promptGesture.classList.remove('gesture-waiting')
   promptGesture.textContent = ''
   const cursor = document.createElement('span')
   cursor.className = 'typing-cursor'
@@ -165,7 +166,8 @@ function typeGesture(text) {
   _gestureTyper = setInterval(() => {
     if (i >= text.length) {
       clearInterval(_gestureTyper); _gestureTyper = null
-      setTimeout(() => cursor.remove(), 900)
+      cursor.remove()
+      promptGesture.classList.add('gesture-waiting')
       return
     }
     cursor.insertAdjacentText('beforebegin', text[i++])
@@ -180,7 +182,10 @@ function showPrompt(element) {
   elementPrompt.classList.remove('hidden')
 }
 
-function hidePrompt() { elementPrompt.classList.add('hidden') }
+function hidePrompt() {
+  promptGesture.classList.remove('gesture-waiting')
+  elementPrompt.classList.add('hidden')
+}
 
 function updatePalmRing(palm, progress, element) {
   const x = (1 - palm.x) * window.innerWidth
