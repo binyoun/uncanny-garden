@@ -5,7 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 const SEED_SCALE    = 0.004
 const FULL_SCALE    = 2.0
 const SEED_HOLD     = 2000
-const GROW_MS       = 8000   // seed → full bloom (single phase)
+const GROW_MS       = 14000  // seed → full bloom (slower, more organic)
 const APPROACH_MS   = 2500   // bloom → move toward viewer
 const RECEDE_MS     = 2000   // move back and shrink away
 const APPROACH_DIST = 0.4    // metres toward camera during approach
@@ -91,7 +91,10 @@ export class GrowTree {
         // ── Bloom up ──────────────────────────────────────────────
         const t = elapsed / GROW_MS
         state.anchor.scale.setScalar(SEED_SCALE + (FULL_SCALE - SEED_SCALE) * easeOutCubic(t))
-        if (t < 0.4) state.anchor.rotation.y += 0.008
+        // continuous orbit so viewer sees all sides of the model
+        state.anchor.rotation.y += 0.006
+        state.anchor.rotation.x = Math.sin(elapsed * 0.00025) * 0.25
+        state.anchor.rotation.z = Math.sin(elapsed * 0.00018 + 1.2) * 0.1
         state.lastProgress = easeOutCubic(t) * 0.8
 
       } else if (elapsed < GROW_MS + APPROACH_MS) {
@@ -100,6 +103,7 @@ export class GrowTree {
         const ease = easeInOutCubic(t)
         state.anchor.scale.setScalar(FULL_SCALE)
         state.anchor.position.z = state.origPosZ + ease * APPROACH_DIST
+        state.anchor.rotation.y += 0.004
         state.lastProgress = 0.8 + ease * 0.1
 
       } else if (elapsed < GROW_MS + APPROACH_MS + RECEDE_MS) {
@@ -108,6 +112,7 @@ export class GrowTree {
         const ease = easeInOutCubic(t)
         state.anchor.position.z = state.origPosZ + (1 - ease) * APPROACH_DIST
         state.anchor.scale.setScalar(FULL_SCALE * (1 - ease))
+        state.anchor.rotation.y += 0.003
         state.lastProgress = 0.9 + ease * 0.1
 
       } else {

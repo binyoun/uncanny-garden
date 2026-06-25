@@ -50,6 +50,7 @@ introFill.position.set(-2, 0, 1)
 introScene.add(introFill)
 
 let introModel    = null
+let introBaseY    = 0   // world-space Y center for oscillation (set when model loads)
 let introActive   = true
 let introRotY     = 0   // accumulated y rotation — driven by auto or drag
 let introDragging = false
@@ -72,7 +73,8 @@ introLoader.load(
       -(center.y / max) * 2.4,
       -(center.z / max) * 2.4
     )
-    model.position.y -= 0.65   // push model 40% lower in frame
+    model.position.y -= 1.1    // sit lower in frame — base for oscillation
+    introBaseY = model.position.y
     introScene.add(model)
     introModel = model
   },
@@ -84,11 +86,11 @@ introLoader.load(
 const SEQUENCE = ['wood', 'fire', 'earth', 'metal', 'water']
 
 const ELEMENT_INFO = {
-  wood:  { label: 'Wood 목',  gesture: 'open palm',   color: '#00cc44' },
-  fire:  { label: 'Fire 화',  gesture: 'point up',    color: '#ff2200' },
-  earth: { label: 'Earth 토', gesture: 'closed fist', color: '#ffcc00' },
-  metal: { label: 'Metal 금', gesture: 'peace sign',  color: '#cccccc' },
-  water: { label: 'Water 수', gesture: 'ok ring',     color: '#0066ff' },
+  wood:  { label: 'Wood',  gesture: 'open palm',   color: '#00cc44' },
+  fire:  { label: 'Fire',  gesture: 'point up',    color: '#ff2200' },
+  earth: { label: 'Earth', gesture: 'closed fist', color: '#ffcc00' },
+  metal: { label: 'Metal', gesture: 'peace sign',  color: '#cccccc' },
+  water: { label: 'Water', gesture: 'ok ring',     color: '#0066ff' },
 }
 
 // Wu Xing cardinal horizontal spread — all placed at ground level
@@ -414,10 +416,11 @@ renderer.setAnimationLoop(() => {
   if (introActive) {
     if (introModel) {
       const t = introClock.getElapsedTime()
-      if (!introDragging) introRotY += 0.014   // auto-rotate (~50°/s at 60fps)
+      if (!introDragging) introRotY += 0.003   // very slow swirl (~11°/s)
       introModel.rotation.y = introRotY
-      introModel.rotation.x = Math.sin(t * 0.28) * 0.12
-      introModel.position.y = Math.sin(t * 0.55) * 0.06
+      introModel.rotation.x = Math.sin(t * 0.15) * 0.14    // slow gentle lean
+      introModel.rotation.z = Math.sin(t * 0.11 + 0.8) * 0.06  // subtle sway
+      introModel.position.y = introBaseY + Math.sin(t * 0.2) * 0.04  // anchored low, slow breathe
     }
     renderer.render(introScene, introCamera)
     return
