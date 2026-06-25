@@ -401,15 +401,19 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchmove', (e) => {
   if (introActive || allComplete || !activeAnchor) return
   if (e.touches.length >= 2) {
-    const dist = getPinchDist(e)
+    const px = getPinchDist(e)
     if (pinchLastDist > 0) {
-      // clamp z — must stay negative so model never passes behind the camera
-      activeAnchor.position.z = Math.min(
-        activeAnchor.position.z + (dist - pinchLastDist) * 0.008,
-        -0.08
-      )
+      const delta = px - pinchLastDist
+      // move along the camera→model ray so depth always feels correct
+      // spread (delta > 0) = closer, pinch (delta < 0) = farther
+      const ray = activeAnchor.position.clone().normalize()
+      activeAnchor.position.addScaledVector(ray, -delta * 0.005)
+      // keep between 0.2 m and 3 m from camera so it never disappears
+      const d = activeAnchor.position.length()
+      if (d < 0.2) activeAnchor.position.setLength(0.2)
+      else if (d > 3.0) activeAnchor.position.setLength(3.0)
     }
-    pinchLastDist = dist
+    pinchLastDist = px
   } else if (e.touches.length === 1 && pinchLastDist === 0) {
     const dx = e.touches[0].clientX - arDragPrevX
     const dy = e.touches[0].clientY - arDragPrevY
