@@ -115,18 +115,32 @@
 
     #landing-credits {
       position: absolute;
-      bottom: 36px;
+      bottom: 28px;
       left: 50%;
       transform: translateX(-50%);
-      text-align: center;
       font-family: 'Josefin Sans', sans-serif;
       font-size: 0.5rem;
       font-weight: 700;
       letter-spacing: 0.2em;
       text-transform: uppercase;
       opacity: 0.55;
-      line-height: 2.4;
-      white-space: nowrap;
+    }
+
+    .credits-names {
+      display: flex;
+      gap: 2.8rem;
+      justify-content: center;
+      margin-bottom: 0.6rem;
+    }
+
+    .credit-person {
+      text-align: center;
+      line-height: 2.1;
+    }
+
+    .credits-year {
+      text-align: center;
+      letter-spacing: 0.25em;
     }
 
     /* ── HUD ── */
@@ -228,10 +242,24 @@
       <p id="landing-desc"></p>
     </div>
     <div id="landing-credits">
-      <div>Randi Matushevitz &nbsp;Techspressionist</div>
-      <div>Bin Youn &nbsp;AR</div>
-      <div>Gustavo Guzmán &nbsp;Sound</div>
-      <div>2026</div>
+      <div class="credits-names">
+        <div class="credit-person">
+          <div>Randi</div>
+          <div>Matushevitz</div>
+          <div>Techspressionist</div>
+        </div>
+        <div class="credit-person">
+          <div>Bin</div>
+          <div>Youn</div>
+          <div>AR</div>
+        </div>
+        <div class="credit-person">
+          <div>Gustavo</div>
+          <div>Guzmán</div>
+          <div>Sound</div>
+        </div>
+      </div>
+      <div class="credits-year">2026</div>
     </div>
   </div>
 
