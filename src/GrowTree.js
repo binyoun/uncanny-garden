@@ -22,9 +22,9 @@ function easeOutCubic(t)   { return 1 - Math.pow(1 - t, 3) }
 function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2 }
 
 // ── Dormant orb: swirling particle cluster ────────────────────
-const ORB_COUNT = 30
-const ORB_R     = 0.07   // helix radius
-const ORB_H     = 0.16   // vertical span
+const ORB_COUNT  = 3
+const ORB_DRIFT  = 0.42   // wide lazy drift radius
+const ORB_DRIFT_H = 0.32  // vertical float range
 
 let _glowTex = null
 function getGlowTex() {
@@ -49,7 +49,7 @@ function makeOrb(scene, element) {
   const geo       = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   const mat = new THREE.PointsMaterial({
-    size: 0.05,
+    size: 0.09,
     map: getGlowTex(),
     color: ELEMENT_COLORS[element],
     transparent: true,
@@ -157,13 +157,12 @@ export class GrowTree {
         const { hit, points, positions, geo } = state.orb
         points.position.copy(hit.position)   // world position of the orb
         for (let i = 0; i < ORB_COUNT; i++) {
-          const ft     = i / ORB_COUNT
-          const strand = i % 2
-          const angle  = ft * Math.PI * 4 + strand * Math.PI + t_s * 2.0
-          const r      = ORB_R * (0.4 + 0.6 * ft)
-          const h      = (ft - 0.5) * ORB_H
-          positions[i*3]     = r * Math.cos(angle)   // local offset
-          positions[i*3 + 1] = h
+          const phase = (i / ORB_COUNT) * Math.PI * 2   // evenly separated
+          const speed = 0.22 + i * 0.09                 // each drifts at own pace
+          const r = ORB_DRIFT * (0.75 + 0.25 * Math.sin(t_s * 0.4 + phase))
+          const angle = phase + t_s * speed
+          positions[i*3]     = r * Math.cos(angle)
+          positions[i*3 + 1] = ORB_DRIFT_H * Math.sin(t_s * 0.28 + phase)
           positions[i*3 + 2] = r * Math.sin(angle)
         }
         geo.attributes.position.needsUpdate = true
