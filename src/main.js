@@ -209,6 +209,8 @@ let allComplete    = false
 const completedEls = new Set()
 const dormantEls   = new Set()   // tracks elements currently in dormant phase
 let activeAnchor   = null         // the most-recently-placed model's anchor (for drag)
+let activeElement  = null         // which element activeAnchor belongs to
+const pinchScales  = Object.fromEntries(SEQUENCE.map(el => [el, 1.0]))
 
 function currentElement() { return SEQUENCE[seqIndex] }
 
@@ -300,7 +302,8 @@ tracker.addEventListener('gesture-confirmed', (e) => {
 
   const worldPos = cardinalWorldPos(element)
   tree.place(element, worldPos)
-  activeAnchor = tree.getAnchor(element)
+  activeAnchor  = tree.getAnchor(element)
+  activeElement = element
   particles[element].start(element, worldPos)
   ensureSound().then(() => sound.triggerPlacement())
   // Next prompt shows only after this model fully grows and disappears
@@ -402,16 +405,10 @@ canvas.addEventListener('touchmove', (e) => {
   if (introActive || allComplete || !activeAnchor) return
   if (e.touches.length >= 2) {
     const px = getPinchDist(e)
-    if (pinchLastDist > 0) {
-      const delta = px - pinchLastDist
-      // move along the camera→model ray so depth always feels correct
-      // spread (delta > 0) = closer, pinch (delta < 0) = farther
-      const ray = activeAnchor.position.clone().normalize()
-      activeAnchor.position.addScaledVector(ray, -delta * 0.005)
-      // keep between 0.2 m and 3 m from camera so it never disappears
-      const d = activeAnchor.position.length()
-      if (d < 0.2) activeAnchor.position.setLength(0.2)
-      else if (d > 3.0) activeAnchor.position.setLength(3.0)
+    if (pinchLastDist > 0 && activeElement) {
+      // scale the model — spread = bigger, pinch = smaller
+      const ratio = px / pinchLastDist
+      pinchScales[activeElement] = Math.max(0.15, Math.min(5.0, pinchScales[activeElement] * ratio))
     }
     pinchLastDist = px
   } else if (e.touches.length === 1 && pinchLastDist === 0) {
@@ -444,7 +441,8 @@ canvas.addEventListener('touchend', (e) => {
         const el = hits[0].object.userData.element
         dormantEls.delete(el)
         tree.reactivate(el)
-        activeAnchor = tree.getAnchor(el)
+        activeAnchor  = tree.getAnchor(el)
+        activeElement = el
         particles[el].start(el, activeAnchor.position.clone())
       }
     }
@@ -553,6 +551,10 @@ renderer.setAnimationLoop(() => {
       } else {
         // seed / grow / recede — keep particles alive
         dormantEls.delete(el)
+        // apply user pinch scale on top of GrowTree's growth scale
+        if (pinchScales[el] !== 1.0) {
+          tree.getAnchor(el).scale.multiplyScalar(pinchScales[el])
+        }
         particles[el].update(progress, delta)
       }
     }
