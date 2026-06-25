@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Uncanny Garden</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -42,16 +45,17 @@
       pointer-events: none;
     }
 
-    /* Title — between loading label and center text, shifted right for uncanny asymmetry */
+    /* Title — between loading label and center text */
     #landing-title {
       position: absolute;
       top: 24%;
-      left: 57%;
+      left: 50%;
       transform: translateX(-50%);
       white-space: nowrap;
-      font-size: clamp(1.4rem, 5vw, 2.8rem);
-      font-weight: 800;
-      letter-spacing: 0.08em;
+      font-family: 'Cinzel Decorative', serif;
+      font-size: clamp(1.82rem, 6.5vw, 3.64rem);
+      font-weight: 400;
+      letter-spacing: 0.12em;
     }
 
     /* Loading counter — tiny, top-right */
