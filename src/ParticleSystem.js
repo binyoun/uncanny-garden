@@ -39,7 +39,7 @@ export class ParticleSystem {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
 
     this._mat = new THREE.PointsMaterial({
-      size: 0.16,
+      size: 0.11,
       map: createGlowTexture(),
       transparent: true,
       opacity: 0.9,

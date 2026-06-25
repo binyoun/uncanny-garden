@@ -3,10 +3,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 
 const SEED_SCALE = 0.004
-const FULL_SCALE = 2.0
+const FULL_SCALE = 1.0     // reduced from 2.0 — was too large
 const SEED_HOLD  = 2000
-const GROW_MS    = 22000   // slow organic bloom
-const RECEDE_MS  = 2500    // shrink and vanish
+const GROW_MS    = 36000   // 36 s — slow organic bloom
+const RECEDE_MS  = 2500
 
 export const SEED_HOLD_MS = SEED_HOLD
 
@@ -21,12 +21,56 @@ const ELEMENT_COLORS = {
 function easeOutCubic(t)   { return 1 - Math.pow(1 - t, 3) }
 function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2 }
 
-function makeOrb(element) {
-  const geo  = new THREE.SphereGeometry(0.07, 16, 16)
-  const mat  = new THREE.MeshBasicMaterial({ color: ELEMENT_COLORS[element] })
-  const mesh = new THREE.Mesh(geo, mat)
-  mesh.userData.element = element
-  return mesh
+// ── Dormant orb: swirling particle cluster ────────────────────
+const ORB_COUNT = 30
+const ORB_R     = 0.07   // helix radius
+const ORB_H     = 0.16   // vertical span
+
+let _glowTex = null
+function getGlowTex() {
+  if (_glowTex) return _glowTex
+  const size = 64
+  const c    = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')
+  const g   = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2)
+  g.addColorStop(0.0, 'rgba(255,255,255,1.0)')
+  g.addColorStop(0.3, 'rgba(255,255,255,0.7)')
+  g.addColorStop(1.0, 'rgba(255,255,255,0.0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, size, size)
+  return (_glowTex = new THREE.CanvasTexture(c))
+}
+
+function makeOrb(scene, element) {
+  // swirling particles — the visual
+  const positions = new Float32Array(ORB_COUNT * 3)
+  const geo       = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  const mat = new THREE.PointsMaterial({
+    size: 0.05,
+    map: getGlowTex(),
+    color: ELEMENT_COLORS[element],
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+  })
+  const points = new THREE.Points(geo, mat)
+  points.visible = false
+  scene.add(points)
+
+  // transparent sphere — exists only for raycasting; renders nothing
+  const hit = new THREE.Mesh(
+    new THREE.SphereGeometry(0.15, 8, 8),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+  )
+  hit.userData.element = element
+  hit.visible = false
+  scene.add(hit)
+
+  return { hit, points, positions, geo }
 }
 
 export class GrowTree {
@@ -78,10 +122,7 @@ export class GrowTree {
     anchor.add(model)
     this._scene.add(anchor)
 
-    const orb = makeOrb(element)
-    orb.position.copy(worldPosition)
-    orb.visible = false
-    this._scene.add(orb)
+    const orb = makeOrb(this._scene, element)
 
     this._state[element] = {
       anchor, orb,
@@ -100,6 +141,7 @@ export class GrowTree {
   update() {
     const result = {}
     const now    = performance.now()
+    const t_s    = now * 0.001
 
     for (const [element, state] of Object.entries(this._state)) {
 
@@ -109,8 +151,21 @@ export class GrowTree {
       }
 
       if (state.phase === 'dormant') {
-        // pulse the orb
-        state.orb.scale.setScalar(1 + Math.sin(now * 0.002) * 0.28)
+        // animate swirling particle orb
+        const { hit, points, positions, geo } = state.orb
+        const ox = hit.position.x, oy = hit.position.y, oz = hit.position.z
+        for (let i = 0; i < ORB_COUNT; i++) {
+          const ft     = i / ORB_COUNT
+          const strand = i % 2
+          const angle  = ft * Math.PI * 4 + strand * Math.PI + t_s * 2.0
+          const r      = ORB_R * (0.4 + 0.6 * ft)
+          const h      = (ft - 0.5) * ORB_H
+          positions[i*3]     = ox + r * Math.cos(angle)
+          positions[i*3 + 1] = oy + h
+          positions[i*3 + 2] = oz + r * Math.sin(angle)
+        }
+        geo.attributes.position.needsUpdate = true
+        points.material.opacity = 0.6 + 0.35 * Math.sin(t_s * 2.5)
         result[element] = { progress: 1, phase: 'dormant' }
         continue
       }
@@ -126,8 +181,8 @@ export class GrowTree {
           state.anchor.rotation.z = Math.sin(elapsed * 0.00018 + 1.2) * 0.1
           state.lastProgress = easeOutCubic(t) * 0.8
         } else {
-          state.phase      = 'recede'
-          state.phaseStart = now
+          state.phase        = 'recede'
+          state.phaseStart   = now
           state.lastProgress = 0.8
         }
 
@@ -138,13 +193,14 @@ export class GrowTree {
           state.anchor.rotation.y += 0.003
           state.lastProgress = 0.8 + ease * 0.2
         } else {
-          // go dormant — orb appears where model was
+          // go dormant — particle orb appears at anchor position
           state.anchor.scale.setScalar(0)
-          state.anchor.visible = false
-          state.orb.position.copy(state.anchor.position)
-          state.orb.visible    = true
-          state.phase          = 'dormant'
-          state.lastProgress   = 1
+          state.anchor.visible          = false
+          state.orb.hit.position.copy(state.anchor.position)
+          state.orb.hit.visible         = true   // transparent but raycasts
+          state.orb.points.visible      = true
+          state.phase                   = 'dormant'
+          state.lastProgress            = 1
         }
       }
 
@@ -157,9 +213,9 @@ export class GrowTree {
   reactivate(element) {
     const state = this._state[element]
     if (!state || state.phase !== 'dormant') return
-    state.orb.visible = false
-    // grow from where the orb was sitting
-    state.anchor.position.copy(state.orb.position)
+    state.orb.hit.visible    = false
+    state.orb.points.visible = false
+    state.anchor.position.copy(state.orb.hit.position)
     state.anchor.rotation.set(0, 0, 0)
     state.anchor.scale.setScalar(SEED_SCALE)
     state.anchor.visible = true
@@ -173,13 +229,15 @@ export class GrowTree {
 
   getDormantOrbs() {
     return Object.values(this._state)
-      .filter(s => s.phase === 'dormant' && s.orb.visible)
-      .map(s => s.orb)
+      .filter(s => s.phase === 'dormant' && s.orb.hit.visible)
+      .map(s => s.orb.hit)
   }
 
   hideAllOrbs() {
     for (const state of Object.values(this._state)) {
-      if (state.orb) state.orb.visible = false
+      if (!state.orb) return
+      state.orb.hit.visible    = false
+      state.orb.points.visible = false
     }
   }
 

@@ -375,7 +375,7 @@ canvas.addEventListener('mousemove', (e) => {
 // ── AR touch: 1-finger drag, 2-finger pinch (Z depth), tap on dormant orbs ──
 let arDragPrevX  = 0, arDragPrevY  = 0
 let arMouseDown  = false
-let pinchActive  = false, pinchLastDist = 0
+let pinchLastDist = 0   // 0 = no active pinch
 let tapStartX    = 0, tapStartY = 0, tapStartTime = 0
 
 function getPinchDist(e) {
@@ -386,11 +386,10 @@ function getPinchDist(e) {
 
 canvas.addEventListener('touchstart', (e) => {
   if (introActive || allComplete) return
-  if (e.touches.length === 2) {
-    pinchActive   = true
+  if (e.touches.length >= 2) {
     pinchLastDist = getPinchDist(e)
-  } else if (e.touches.length === 1) {
-    pinchActive  = false
+  } else {
+    pinchLastDist = 0
     arDragPrevX  = e.touches[0].clientX
     arDragPrevY  = e.touches[0].clientY
     tapStartX    = e.touches[0].clientX
@@ -401,11 +400,13 @@ canvas.addEventListener('touchstart', (e) => {
 
 canvas.addEventListener('touchmove', (e) => {
   if (introActive || allComplete || !activeAnchor) return
-  if (e.touches.length === 2 && pinchActive) {
-    const dist  = getPinchDist(e)
-    activeAnchor.position.z += (dist - pinchLastDist) * 0.005
+  if (e.touches.length >= 2) {
+    const dist = getPinchDist(e)
+    if (pinchLastDist > 0) {
+      activeAnchor.position.z += (dist - pinchLastDist) * 0.008
+    }
     pinchLastDist = dist
-  } else if (e.touches.length === 1 && !pinchActive) {
+  } else if (e.touches.length === 1 && pinchLastDist === 0) {
     const dx = e.touches[0].clientX - arDragPrevX
     const dy = e.touches[0].clientY - arDragPrevY
     activeAnchor.rotation.y += dx * 0.012
@@ -417,14 +418,14 @@ canvas.addEventListener('touchmove', (e) => {
 
 canvas.addEventListener('touchend', (e) => {
   if (introActive || allComplete) return
-  if (e.touches.length < 2) pinchActive = false
+  if (e.touches.length < 2) pinchLastDist = 0
 
-  // tap: small movement, short duration
-  if (e.changedTouches.length === 1) {
+  // tap: small movement + short duration, only from single-finger lift
+  const wasPinching = e.touches.length >= 1
+  if (!wasPinching && e.changedTouches.length === 1) {
     const dx = e.changedTouches[0].clientX - tapStartX
     const dy = e.changedTouches[0].clientY - tapStartY
-    const isShortTap = Math.sqrt(dx * dx + dy * dy) < 18 && Date.now() - tapStartTime < 300
-    if (isShortTap) {
+    if (Math.sqrt(dx * dx + dy * dy) < 18 && Date.now() - tapStartTime < 350) {
       const ndc = new THREE.Vector2(
         (e.changedTouches[0].clientX / window.innerWidth) * 2 - 1,
         -(e.changedTouches[0].clientY / window.innerHeight) * 2 + 1,
