@@ -35,6 +35,8 @@ scene.add(sun)
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 200)
 camera.position.set(0, 0, 0)
 
+const raycaster = new THREE.Raycaster()
+
 // ── Intro scene ───────────────────────────────────────────────
 const introScene  = new THREE.Scene()
 introScene.environment = envTexture
@@ -205,7 +207,8 @@ let seqIndex       = 0
 let seqActive      = false
 let allComplete    = false
 const completedEls = new Set()
-let activeAnchor   = null   // the currently-growing model's anchor (for drag)
+const dormantEls   = new Set()   // tracks elements currently in dormant phase
+let activeAnchor   = null         // the most-recently-placed model's anchor (for drag)
 
 function currentElement() { return SEQUENCE[seqIndex] }
 
@@ -231,6 +234,7 @@ function activateFinalState() {
   hidePrompt()
   hidePalmRing()
   tracker.stop()
+  tree.hideAllOrbs()
 
   SEQUENCE.forEach((el, i) => {
     const angle  = (i / SEQUENCE.length) * Math.PI * 2
@@ -368,23 +372,74 @@ canvas.addEventListener('mousemove', (e) => {
   introDragPrevX = e.clientX
 })
 
-// ── AR model drag (during individual element growth) ──────────
-let arDragPrevX = 0, arDragPrevY = 0, arMouseDown = false
+// ── AR touch: 1-finger drag, 2-finger pinch (Z depth), tap on dormant orbs ──
+let arDragPrevX  = 0, arDragPrevY  = 0
+let arMouseDown  = false
+let pinchActive  = false, pinchLastDist = 0
+let tapStartX    = 0, tapStartY = 0, tapStartTime = 0
+
+function getPinchDist(e) {
+  const dx = e.touches[0].clientX - e.touches[1].clientX
+  const dy = e.touches[0].clientY - e.touches[1].clientY
+  return Math.sqrt(dx * dx + dy * dy)
+}
 
 canvas.addEventListener('touchstart', (e) => {
   if (introActive || allComplete) return
-  arDragPrevX = e.touches[0].clientX
-  arDragPrevY = e.touches[0].clientY
+  if (e.touches.length === 2) {
+    pinchActive   = true
+    pinchLastDist = getPinchDist(e)
+  } else if (e.touches.length === 1) {
+    pinchActive  = false
+    arDragPrevX  = e.touches[0].clientX
+    arDragPrevY  = e.touches[0].clientY
+    tapStartX    = e.touches[0].clientX
+    tapStartY    = e.touches[0].clientY
+    tapStartTime = Date.now()
+  }
 }, { passive: true })
 
 canvas.addEventListener('touchmove', (e) => {
   if (introActive || allComplete || !activeAnchor) return
-  const dx = e.touches[0].clientX - arDragPrevX
-  const dy = e.touches[0].clientY - arDragPrevY
-  activeAnchor.rotation.y += dx * 0.012
-  activeAnchor.position.y -= dy * 0.004
-  arDragPrevX = e.touches[0].clientX
-  arDragPrevY = e.touches[0].clientY
+  if (e.touches.length === 2 && pinchActive) {
+    const dist  = getPinchDist(e)
+    activeAnchor.position.z += (dist - pinchLastDist) * 0.005
+    pinchLastDist = dist
+  } else if (e.touches.length === 1 && !pinchActive) {
+    const dx = e.touches[0].clientX - arDragPrevX
+    const dy = e.touches[0].clientY - arDragPrevY
+    activeAnchor.rotation.y += dx * 0.012
+    activeAnchor.position.y -= dy * 0.004
+    arDragPrevX = e.touches[0].clientX
+    arDragPrevY = e.touches[0].clientY
+  }
+}, { passive: true })
+
+canvas.addEventListener('touchend', (e) => {
+  if (introActive || allComplete) return
+  if (e.touches.length < 2) pinchActive = false
+
+  // tap: small movement, short duration
+  if (e.changedTouches.length === 1) {
+    const dx = e.changedTouches[0].clientX - tapStartX
+    const dy = e.changedTouches[0].clientY - tapStartY
+    const isShortTap = Math.sqrt(dx * dx + dy * dy) < 18 && Date.now() - tapStartTime < 300
+    if (isShortTap) {
+      const ndc = new THREE.Vector2(
+        (e.changedTouches[0].clientX / window.innerWidth) * 2 - 1,
+        -(e.changedTouches[0].clientY / window.innerHeight) * 2 + 1,
+      )
+      raycaster.setFromCamera(ndc, camera)
+      const hits = raycaster.intersectObjects(tree.getDormantOrbs())
+      if (hits.length > 0) {
+        const el = hits[0].object.userData.element
+        dormantEls.delete(el)
+        tree.reactivate(el)
+        activeAnchor = tree.getAnchor(el)
+        particles[el].start(el, activeAnchor.position.clone())
+      }
+    }
+  }
 }, { passive: true })
 
 canvas.addEventListener('mousedown', (e) => {
@@ -475,14 +530,21 @@ renderer.setAnimationLoop(() => {
   } else {
     const progressMap = tree.update()
 
-    for (const [el, progress] of Object.entries(progressMap)) {
-      if (progress < 1) {
+    for (const [el, { progress, phase }] of Object.entries(progressMap)) {
+      if (phase === 'dormant') {
+        // first frame entering dormant: stop particles, advance sequence
+        if (!dormantEls.has(el)) {
+          dormantEls.add(el)
+          particles[el].stop()
+          if (!completedEls.has(el)) {
+            completedEls.add(el)
+            onElementComplete(el)
+          }
+        }
+      } else {
+        // seed / grow / recede — keep particles alive
+        dormantEls.delete(el)
         particles[el].update(progress, delta)
-      } else if (!completedEls.has(el)) {
-        completedEls.add(el)
-        particles[el].stop()
-        tree.getAnchor(el).visible = false
-        onElementComplete(el)
       }
     }
   }
