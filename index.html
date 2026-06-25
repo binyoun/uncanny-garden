@@ -10,9 +10,14 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html {
+      touch-action: none;   /* block iOS Safari pinch-zoom at root level */
+    }
+
     body {
       background: #000;
       overflow: hidden;
+      touch-action: none;
       font-family: system-ui, sans-serif;
       color: #fff;
     }
@@ -21,7 +26,7 @@
       position: fixed;
       inset: 0;
       z-index: 1;
-      touch-action: none;   /* prevent browser pinch-zoom from hijacking the gesture */
+      touch-action: none;
     }
 
     #camera-feed {

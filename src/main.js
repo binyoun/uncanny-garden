@@ -210,7 +210,6 @@ const completedEls = new Set()
 const dormantEls   = new Set()   // tracks elements currently in dormant phase
 let activeAnchor   = null         // the most-recently-placed model's anchor (for drag)
 let activeElement  = null         // which element activeAnchor belongs to
-const pinchScales  = Object.fromEntries(SEQUENCE.map(el => [el, 1.0]))
 
 function currentElement() { return SEQUENCE[seqIndex] }
 
@@ -338,6 +337,13 @@ function maybeEnterAR() {
   tracker.start()
 }
 
+// Block iOS Safari's native pinch-zoom — touch-action:none in CSS is often
+// ignored on canvas; an explicit non-passive preventDefault is the only
+// reliable cross-browser solution.
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length >= 2) e.preventDefault()
+}, { passive: false })
+
 // Sound requires a user gesture on iOS — init lazily on first touch
 let soundReady = false
 async function ensureSound() {
@@ -405,10 +411,15 @@ canvas.addEventListener('touchmove', (e) => {
   if (introActive || allComplete || !activeAnchor) return
   if (e.touches.length >= 2) {
     const px = getPinchDist(e)
-    if (pinchLastDist > 0 && activeElement) {
-      // scale the model — spread = bigger, pinch = smaller
-      const ratio = px / pinchLastDist
-      pinchScales[activeElement] = Math.max(0.15, Math.min(5.0, pinchScales[activeElement] * ratio))
+    if (pinchLastDist > 0 && activeAnchor) {
+      const delta   = px - pinchLastDist          // positive = spreading
+      const current = activeAnchor.position.length()
+      if (current > 0) {
+        // spread fingers → model closer (distance shrinks)
+        // pinch fingers  → model further (distance grows)
+        const next = THREE.MathUtils.clamp(current - delta * 0.006, 0.25, 3.5)
+        activeAnchor.position.setLength(next)
+      }
     }
     pinchLastDist = px
   } else if (e.touches.length === 1 && pinchLastDist === 0) {
@@ -551,10 +562,6 @@ renderer.setAnimationLoop(() => {
       } else {
         // seed / grow / recede — keep particles alive
         dormantEls.delete(el)
-        // apply user pinch scale on top of GrowTree's growth scale
-        if (pinchScales[el] !== 1.0) {
-          tree.getAnchor(el).scale.multiplyScalar(pinchScales[el])
-        }
         particles[el].update(progress, delta)
       }
     }
