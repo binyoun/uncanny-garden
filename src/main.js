@@ -90,7 +90,7 @@ const SEQUENCE = ['wood', 'fire', 'earth', 'metal', 'water']
 const ELEMENT_INFO = {
   wood:  { label: 'Wood',  gesture: 'open palm',   color: '#00cc44' },
   fire:  { label: 'Fire',  gesture: 'point up',    color: '#ff2200' },
-  earth: { label: 'Earth', gesture: 'closed fist', color: '#ffcc00' },
+  earth: { label: 'Soil',  gesture: 'closed fist', color: '#ffcc00' },
   metal: { label: 'Metal', gesture: 'peace sign',  color: '#cccccc' },
   water: { label: 'Water', gesture: 'ok ring',     color: '#0066ff' },
 }
