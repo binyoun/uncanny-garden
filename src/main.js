@@ -153,11 +153,30 @@ const ELEMENT_RING_COLORS = {
   water: '#0066ff',
 }
 
+let _gestureTyper = null
+
+function typeGesture(text) {
+  if (_gestureTyper) { clearInterval(_gestureTyper); _gestureTyper = null }
+  promptGesture.textContent = ''
+  const cursor = document.createElement('span')
+  cursor.className = 'typing-cursor'
+  promptGesture.appendChild(cursor)
+  let i = 0
+  _gestureTyper = setInterval(() => {
+    if (i >= text.length) {
+      clearInterval(_gestureTyper); _gestureTyper = null
+      setTimeout(() => cursor.remove(), 900)
+      return
+    }
+    cursor.insertAdjacentText('beforebegin', text[i++])
+  }, 55)
+}
+
 function showPrompt(element) {
   const info = ELEMENT_INFO[element]
   promptElement.textContent = info.label
   promptElement.style.color = info.color
-  promptGesture.textContent = info.gesture
+  typeGesture(info.gesture)
   elementPrompt.classList.remove('hidden')
 }
 
