@@ -49,8 +49,9 @@ const introFill = new THREE.DirectionalLight(0xddeeff, 0.5)
 introFill.position.set(-2, 0, 1)
 introScene.add(introFill)
 
-let introModel    = null
-let introBaseY    = 0   // world-space Y center for oscillation (set when model loads)
+let introModel     = null
+let introBaseY     = 0   // world-space Y center for oscillation (set when model loads)
+let introBaseScale = 1   // scale at load time, used as pulse base
 let introActive   = true
 let introRotY     = 0   // accumulated y rotation — driven by auto or drag
 let introDragging = false
@@ -66,7 +67,8 @@ introLoader.load(
     const box   = new THREE.Box3().setFromObject(model)
     const size  = box.getSize(new THREE.Vector3())
     const max   = Math.max(size.x, size.y, size.z)
-    if (max > 0) model.scale.setScalar(2.4 / max)
+    introBaseScale = max > 0 ? 2.4 / max : 1
+    model.scale.setScalar(introBaseScale)
     const center = box.getCenter(new THREE.Vector3())
     model.position.set(
       -(center.x / max) * 2.4,
@@ -416,11 +418,14 @@ renderer.setAnimationLoop(() => {
   if (introActive) {
     if (introModel) {
       const t = introClock.getElapsedTime()
-      if (!introDragging) introRotY += 0.005   // slow swirl (~18°/s)
+      if (!introDragging) introRotY += 0.005
       introModel.rotation.y = introRotY
-      introModel.rotation.x = Math.sin(t * 0.18) * 0.2     // lean — shows model depth
-      introModel.rotation.z = Math.sin(t * 0.13 + 0.8) * 0.09  // sway
-      introModel.position.y = introBaseY + Math.sin(t * 0.28) * 0.22  // visible rise and fall
+      introModel.rotation.x = Math.sin(t * 0.18) * 0.2
+      introModel.rotation.z = Math.sin(t * 0.13 + 0.8) * 0.09
+      introModel.position.y = introBaseY + Math.sin(t * 0.28) * 0.22
+      // two-frequency pulse: fast throb + slow swell
+      const pulse = 1 + Math.sin(t * 1.2) * 0.07 + Math.sin(t * 0.35) * 0.04
+      introModel.scale.setScalar(introBaseScale * pulse)
     }
     renderer.render(introScene, introCamera)
     return
