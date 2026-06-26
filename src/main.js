@@ -127,7 +127,7 @@ for (const el of SEQUENCE) particles[el] = new ParticleSystem(scene)
 
 // ── Orbit group (final state) ─────────────────────────────────
 const orbitGroup = new THREE.Group()
-orbitGroup.position.set(0, -0.1, -1.0)
+orbitGroup.position.set(0, -0.3, 0)   // camera sits at center of the ring
 orbitGroup.visible = false
 scene.add(orbitGroup)
 
@@ -227,8 +227,8 @@ function onElementComplete(el) {
 }
 
 // ── Final orbit state ─────────────────────────────────────────
-const ORBIT_SCALE  = 0.65
-const ORBIT_RADIUS = 1.0
+const ORBIT_SCALE  = 0.5
+const ORBIT_RADIUS = 1.6
 
 function activateFinalState() {
   allComplete = true
@@ -257,28 +257,60 @@ function activateFinalState() {
   startOrbitDrag()
 }
 
-// ── Drag to rotate orbit ──────────────────────────────────────
+// ── Drag / pinch for final orbit ─────────────────────────────
 function startOrbitDrag() {
-  let prevX = 0
+  let prevX = 0, prevY = 0
+  let oPinchLast = 0   // 0 = no active pinch
 
   renderer.domElement.addEventListener('touchstart', (e) => {
-    prevX = e.touches[0].clientX
+    if (e.touches.length >= 2) {
+      oPinchLast = getPinchDist(e)
+    } else {
+      oPinchLast = 0
+      prevX = e.touches[0].clientX
+      prevY = e.touches[0].clientY
+    }
   }, { passive: true })
 
   renderer.domElement.addEventListener('touchmove', (e) => {
-    orbitGroup.rotation.y += (e.touches[0].clientX - prevX) * 0.007
-    prevX = e.touches[0].clientX
+    if (e.touches.length >= 2) {
+      const px = getPinchDist(e)
+      if (oPinchLast > 0) {
+        // spread = ring expands (models further); pinch = ring contracts (closer)
+        const ratio = px / oPinchLast
+        const next  = THREE.MathUtils.clamp(orbitGroup.scale.x * ratio, 0.3, 2.5)
+        orbitGroup.scale.setScalar(next)
+      }
+      oPinchLast = px
+    } else {
+      oPinchLast = 0
+      const dx = e.touches[0].clientX - prevX
+      const dy = e.touches[0].clientY - prevY
+      orbitGroup.rotation.y += dx * 0.007
+      orbitGroup.rotation.x = THREE.MathUtils.clamp(
+        orbitGroup.rotation.x + dy * 0.004, -0.45, 0.45
+      )
+      prevX = e.touches[0].clientX
+      prevY = e.touches[0].clientY
+    }
+  }, { passive: true })
+
+  renderer.domElement.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) oPinchLast = 0
   }, { passive: true })
 
   let mouseDown = false
   renderer.domElement.addEventListener('mousedown', (e) => {
-    mouseDown = true; prevX = e.clientX
+    mouseDown = true; prevX = e.clientX; prevY = e.clientY
   })
-  renderer.domElement.addEventListener('mouseup',  () => { mouseDown = false })
+  renderer.domElement.addEventListener('mouseup', () => { mouseDown = false })
   renderer.domElement.addEventListener('mousemove', (e) => {
     if (!mouseDown) return
     orbitGroup.rotation.y += (e.clientX - prevX) * 0.007
-    prevX = e.clientX
+    orbitGroup.rotation.x = THREE.MathUtils.clamp(
+      orbitGroup.rotation.x + (e.clientY - prevY) * 0.004, -0.45, 0.45
+    )
+    prevX = e.clientX; prevY = e.clientY
   })
 }
 
@@ -535,15 +567,26 @@ renderer.setAnimationLoop(() => {
   if (video.readyState >= 2) tracker.detect(video, performance.now())
 
   if (allComplete) {
-    orbitGroup.rotation.y += 0.004
+    const t = clock.elapsedTime
+    orbitGroup.rotation.y += 0.003   // slow ring auto-rotation
 
-    for (const el of SEQUENCE) {
-      const anchor = tree.getAnchor(el)
+    SEQUENCE.forEach((el, i) => {
+      const anchor    = tree.getAnchor(el)
+      const phase     = (i / SEQUENCE.length) * Math.PI * 2
+
+      // bob and breathe — same organic feel as intro / grow animations
+      anchor.position.y  = Math.sin(t * 0.42 + phase) * 0.12
+      anchor.rotation.y += 0.005
+      anchor.rotation.x  = Math.sin(t * 0.28 + phase * 0.7) * 0.14
+      anchor.rotation.z  = Math.sin(t * 0.19 + phase * 1.2) * 0.07
+      const pulse = 1 + Math.sin(t * 0.65 + phase) * 0.07 + Math.sin(t * 0.31 + phase) * 0.04
+      anchor.scale.setScalar(ORBIT_SCALE * pulse)
+
       const worldPos = new THREE.Vector3()
       anchor.getWorldPosition(worldPos)
       particles[el].setOrigin(worldPos)
       particles[el].update(0.5, delta)
-    }
+    })
 
   } else {
     const progressMap = tree.update()
