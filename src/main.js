@@ -547,13 +547,26 @@ renderer.setAnimationLoop(() => {
   if (introActive) {
     if (introModel) {
       const t = introClock.getElapsedTime()
-      if (!introDragging) introRotY += 0.005
+
+      // variable-speed slow rotation — like a vine turning toward light
+      if (!introDragging) introRotY += 0.003 + Math.sin(t * 0.11) * 0.0015
       introModel.rotation.y = introRotY
-      introModel.rotation.x = Math.sin(t * 0.18) * 0.2
-      introModel.rotation.z = Math.sin(t * 0.13 + 0.8) * 0.09
-      introModel.position.y = introBaseY + Math.sin(t * 0.28) * 0.22
-      // two-frequency pulse: fast throb + slow swell
-      const pulse = 1 + Math.sin(t * 1.2) * 0.07 + Math.sin(t * 0.35) * 0.04
+
+      // layered slow tendrilling — two independent sinusoids per axis
+      // so motion never repeats in a simple loop
+      introModel.rotation.x = Math.sin(t * 0.10) * 0.18
+                             + Math.sin(t * 0.27 + 1.4) * 0.07
+      introModel.rotation.z = Math.sin(t * 0.08 + 0.6) * 0.13
+                             + Math.sin(t * 0.21 + 2.2) * 0.05
+
+      // slow upward reach with secondary sway — growing upward tendency
+      introModel.position.y = introBaseY
+                             + Math.sin(t * 0.16) * 0.18
+                             + Math.sin(t * 0.06 + 1.0) * 0.09
+
+      // slow breathing scale — gentle swell like a living plant
+      const pulse = 1 + Math.sin(t * 0.38) * 0.055
+                      + Math.sin(t * 0.14 + 0.5) * 0.03
       introModel.scale.setScalar(introBaseScale * pulse)
     }
     renderer.render(introScene, introCamera)
