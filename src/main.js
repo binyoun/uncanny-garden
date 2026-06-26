@@ -227,8 +227,8 @@ function onElementComplete(el) {
 }
 
 // ── Final orbit state ─────────────────────────────────────────
-const ORBIT_SCALE  = 0.5
-const ORBIT_RADIUS = 1.6
+const ORBIT_SCALE  = 0.75
+const ORBIT_RADIUS = 1.0
 
 function activateFinalState() {
   allComplete = true
@@ -277,7 +277,8 @@ function startOrbitDrag() {
       const px = getPinchDist(e)
       if (oPinchLast > 0) {
         // spread = ring expands (models further); pinch = ring contracts (closer)
-        const ratio = px / oPinchLast
+        // flipped: spread = ring contracts (models closer), pinch = expands (further)
+        const ratio = oPinchLast / px
         const next  = THREE.MathUtils.clamp(orbitGroup.scale.x * ratio, 0.3, 2.5)
         orbitGroup.scale.setScalar(next)
       }
