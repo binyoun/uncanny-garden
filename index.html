@@ -99,15 +99,19 @@
       min-height: 5em;
     }
 
-    /* Sound reminder — centered, pulses beneath the typed line */
+    /* Sound reminder — centered, between title and instruction text */
     #sound-hint {
-      margin-top: 1.2rem;
+      position: absolute;
+      top: 33%;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
       font-family: 'Josefin Sans', sans-serif;
-      font-size: 0.68rem;
+      font-size: 0.6rem;
       font-weight: 700;
-      letter-spacing: 0.26em;
+      letter-spacing: 0.24em;
       text-transform: uppercase;
-      opacity: 0.6;
+      opacity: 0.55;
       animation: gesture-pulse 2.2s ease-in-out infinite;
     }
 
@@ -274,10 +278,10 @@
   <!-- Landing -->
   <div id="landing">
     <h1 id="landing-title"><span class="tc">U</span>ncanny <span class="tc">G</span>arden</h1>
+    <p id="sound-hint">Sound On</p>
     <p id="loading-label">loading 0 / 5</p>
     <div id="landing-center">
       <p id="landing-desc"></p>
-      <p id="sound-hint">Sound On</p>
     </div>
     <div id="landing-credits">
       <div class="credits-names">
