@@ -9,14 +9,15 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 ## Experience Flow
 
 1. Open the site on a mobile browser and allow camera access.
-2. A landing screen shows an animated 3D hair model with direction text typed character by character.
-3. After models load (minimum 10 seconds on the landing), AR mode begins automatically.
-4. A gesture prompt appears for the first element (Wood). Hold the correct gesture steady for 1.5 seconds to confirm.
-5. The model blooms at a cardinal AR position over ~36 seconds with slow organic rotation and growth.
-6. One-finger drag rotates and lifts the model. Two-finger pinch moves it closer or further along the line of sight.
-7. When growth completes the model recedes, leaving behind a dormant particle orb (3 drifting colored particles). Tap the orb to reactivate and re-grow that element while others continue.
-8. After all five elements complete, a final stage activates: all five models orbit the viewer in a ring with the camera at the center.
-9. In the final stage, drag to spin and tilt the ring; pinch to contract or expand it.
+2. A preload screen appears instantly, before any model finishes loading -- "Sound On" plus a content warning (sudden and high-pitched sounds), so the wait for assets doubles as an intentional beat rather than a blank stall.
+3. The landing screen fades in: an animated 3D hair model with direction text typed character by character, plus a pulsing "Sound On" reminder.
+4. After models load (minimum 10 seconds on the landing), AR mode begins automatically.
+5. A gesture prompt appears for the first element (Wood). Hold the correct gesture steady for 1.5 seconds to confirm.
+6. On confirm, a snapshot of the participant's own hand appears at the placement point -- a soft, seed-shaped photo. The model begins growing from that same spot over ~36 seconds, with slow organic rotation and periodic "corruption" stutters whose character (timing, intensity, whether it snaps or swells) is unique to each element. Partway through, the hand-photo folds into a spinning kaleidoscope and dissolves, handing off from "photo of the hand" to "the model."
+7. One-finger drag rotates and lifts the model. Two-finger pinch moves it closer or further along the line of sight.
+8. When growth completes the model recedes (with a screen-wide glitch burst as it collapses), leaving behind a dormant particle orb (3 drifting colored particles). Tap the orb to reactivate and re-grow that element while others continue.
+9. After all five elements complete, a final stage activates: all five models orbit the viewer in a ring, sized to fill the frame without crowding it.
+10. In the final stage, drag to spin and tilt the ring; pinch to contract or expand it (now with a much wider zoom range). Hand tracking stays active here: any hand in frame gives all five a light ambient glitch ("Reach to Mutate" appears on screen), and reaching toward one specific model -- tracked via the camera, not a screen tap -- mutates just that one, harder and in its own elemental style.
 
 ## Gesture Map
 
@@ -46,9 +47,11 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 | Input | Action |
 |---|---|
 | 1-finger drag horizontal | Spin the ring around Y axis |
-| 1-finger drag vertical | Tilt the ring up/down (±26°) |
+| 1-finger drag vertical | Tilt the ring up/down (±37°) |
 | 2-finger spread | Contract ring (models closer) |
-| 2-finger pinch | Expand ring (models further) |
+| 2-finger pinch | Expand ring (models further, wide zoom range) |
+| Any hand in camera frame | Light ambient glitch across all five models |
+| Reach toward a specific model | Localized "mutate" glitch on just that model, styled to its element |
 
 ---
 
@@ -60,8 +63,10 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 - **3D models** -- GLB format, meshopt-compressed with WebP textures (≤5 MB each), loaded with `GLTFLoader` + `MeshoptDecoder`
 - **Particle system** -- Custom double-helix `BufferGeometry` (120 particles, additive blending, element-colored glow, dot size 0.11)
 - **Dormant orbs** -- 3-particle swirling cluster per element using the same glow texture; transparent `SphereGeometry` hitbox for reliable tap raycasting
-- **Audio** -- `SoundEngine` (Tone.js) triggered on placement and full growth
-- **Fonts** -- Cinzel Decorative (title, gesture prompts), Josefin Sans (credits)
+- **Audio** -- `SoundEngine` (Web Audio API): per-element growth track + one-shot seed accent triggered together on placement, plus a looping ambient "tandem" track for the final orbit stage
+- **Hand-photo capture** -- `HandPhoto` captures the participant's hand from the camera feed at the moment of gesture-confirm, masked into a soft seed-shaped oval, then folds into a spinning kaleidoscope and dissolves as the real model grows in
+- **Glitch system** -- Layered across three levels: a screen-wide `EffectComposer` + `GlitchPass` burst; rigid-body scale/rotation/position jitter on each model's anchor; and `ModelGlitch`, which patches each model's own material (`onBeforeCompile`) for surface-level color corruption and a vertex-shader wobble. All three read from shared per-element "personality" profiles matched to Wu Xing character -- fire is fast and violent, earth is rare and heavy, metal is brief and rigid with sharp mirror-flips, water swells smoothly instead of snapping, wood is the moderate baseline
+- **Fonts** -- Cinzel Decorative (title, gesture prompts, final-stage hint), Josefin Sans (credits, sound/warning copy)
 - **Build** -- Vite 5.4, `base: '/'` for custom domain
 - **Deploy** -- GitHub Actions → GitHub Pages → custom domain `uncanny.live`
 
@@ -71,21 +76,30 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 
 ```
 uncanny-garden/
-├── index.html              # Landing page, HUD, CSS, typing-effect script
+├── index.html              # Preload screen, landing page, HUD, CSS, typing-effect script
 ├── src/
-│   ├── main.js             # App entry, AR render loop, HUD, all event wiring
+│   ├── main.js             # App entry, AR render loop, HUD, glitch composer, all event wiring
 │   ├── HandTracker.js      # MediaPipe wrapper, gesture classifier, hold-confirm logic
-│   ├── GrowTree.js         # GLB loader, phase state machine (seed→grow→recede→dormant)
+│   ├── GrowTree.js         # GLB loader, phase state machine (seed→grow→recede→dormant), per-element glitch stutter
 │   ├── ParticleSystem.js   # Double-helix particle emitter (per element)
-│   └── SoundEngine.js      # Audio trigger wrapper
+│   ├── SoundEngine.js      # Per-element sound (growth track + seed accent + ambient tandem track)
+│   ├── HandPhoto.js        # Hand snapshot capture, seed-shaped mask, kaleidoscope dissolve
+│   └── ModelGlitch.js      # Per-material shader patch for surface glitch + vertex wobble
 ├── public/
-│   └── models/
-│       ├── hair_1.glb      # Landing page model
-│       ├── tree.glb        # Wood element
-│       ├── fire.glb        # Fire element
-│       ├── earth.glb       # Soil element
-│       ├── metal.glb       # Metal element
-│       └── water.glb       # Water element
+│   ├── models/
+│   │   ├── hair_1.glb      # Landing page model
+│   │   ├── tree.glb        # Wood element
+│   │   ├── fire.glb        # Fire element
+│   │   ├── earth.glb       # Soil element
+│   │   ├── metal.glb       # Metal element
+│   │   └── water.glb       # Water element
+│   └── audio/
+│       ├── wood.mp3, wood-seed.mp3       # Growth track + seed accent, per element
+│       ├── fire.mp3, fire-seed.mp3
+│       ├── earth.mp3, earth-seed.mp3
+│       ├── metal.mp3, metal-seed.mp3
+│       ├── water.mp3, water-seed.mp3
+│       └── tandem.mp3                    # Final orbit stage ambient loop
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml      # Build + deploy to GitHub Pages on push to main
@@ -104,9 +118,9 @@ seed (2 s hold) → grow (36 s bloom) → recede (2.5 s shrink) → dormant
                                                           tap orb → seed
 ```
 
-- **seed** -- tiny seed scale, waiting for grow timer
-- **grow** -- scale interpolated seed→full with easeOutCubic, slow organic rotation
-- **recede** -- scale shrinks back with easeInOutCubic
+- **seed** -- tiny seed scale, waiting for grow timer; the hand-photo snapshot is visible here
+- **grow** -- scale interpolated seed→full with easeOutCubic, slow organic rotation, plus a periodic per-element "corruption" stutter (timing/magnitude/smooth-vs-snap character unique to each element) driving both the rigid-body jitter and the model's own surface glitch
+- **recede** -- scale shrinks back with easeInOutCubic; a screen-wide glitch burst marks the collapse into the dormant orb
 - **dormant** -- model hidden; 3-particle colored orb drifts at anchor position; transparent sphere hitbox enables tap raycasting
 
 ---
@@ -118,14 +132,16 @@ npm install
 npm run dev      # HTTPS local server (required for camera + MediaPipe)
 ```
 
-Camera and MediaPipe require HTTPS. Vite is configured with `server: { https: true, host: true }` -- accept the self-signed certificate on first run. Test on mobile by connecting to the LAN IP shown in the terminal.
+Camera and MediaPipe require HTTPS. Vite is configured with `@vitejs/plugin-basic-ssl` (pinned to `1.2.0` for Vite 5 compatibility) rather than the bare `https: true` option, since newer Node/OpenSSL builds fail the TLS handshake with the latter -- accept the self-signed certificate on first run. Test on mobile by connecting to the LAN IP shown in the terminal.
 
 ### Deploying
 
-Push to `main`. GitHub Actions runs `npm ci && npm run build` and deploys `dist/` to GitHub Pages automatically.
+Work-in-progress is developed on an `experiment` branch so nothing deploys until it's confirmed working on-device. To ship:
 
 ```bash
-git push origin main
+git checkout main
+git merge experiment
+git push origin main   # GitHub Actions runs npm ci && npm run build, deploys dist/ to GitHub Pages
 ```
 
 The custom domain `uncanny.live` requires `base: '/'` in `vite.config.js` (not the repo-name subdirectory path).
@@ -151,7 +167,7 @@ git config http.postBuffer 524288000
 
 ## Five Elements Reference
 
-The work is structured around 오행 (五行, Wu Xing) -- the classical East Asian system of five elemental phases: Wood (목), Fire (화), Soil (토), Metal (금), Water (수). Each element is associated with a cardinal direction, season, color, and body of correspondences, here mapped to hand gesture, 3D form, and spatial position in the AR field.
+The work is structured around 오행 (五行, Wu Xing) -- the classical East Asian system of five elemental phases: Wood (목), Fire (화), Soil (토), Metal (금), Water (수). Each element is associated with a cardinal direction, season, color, and body of correspondences, here mapped to hand gesture, 3D form, spatial position, sound, and glitch character in the AR field.
 
 ---
 
