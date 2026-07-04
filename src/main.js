@@ -122,6 +122,17 @@ const tracker = new HandTracker()
 const tree    = new GrowTree(scene)
 const sound   = new SoundEngine()
 
+sound.init().then(() =>
+  Promise.all(SEQUENCE.map((el) => sound.loadElement(el, {
+    seed: `${BASE}audio/${el}-seed.mp3`,
+    grow: `${BASE}audio/${el}.mp3`,
+  })))
+).catch((err) => console.warn('Sound load failed:', err))
+
+// iOS/Safari suspend AudioContext until a user gesture
+window.addEventListener('touchstart', () => sound.resume(), { once: true })
+window.addEventListener('mousedown',  () => sound.resume(), { once: true })
+
 const particles = {}
 for (const el of SEQUENCE) particles[el] = new ParticleSystem(scene)
 
@@ -253,7 +264,6 @@ function activateFinalState() {
   })
 
   orbitGroup.visible = true
-  sound.triggerFullGrown()
   startOrbitDrag()
 }
 
@@ -337,7 +347,7 @@ tracker.addEventListener('gesture-confirmed', (e) => {
   activeAnchor  = tree.getAnchor(element)
   activeElement = element
   particles[element].start(element, worldPos)
-  ensureSound().then(() => sound.triggerPlacement())
+  sound.trigger(element)
   // Next prompt shows only after this model fully grows and disappears
 })
 
@@ -377,15 +387,6 @@ window.addEventListener('touchmove', (e) => {
   if (e.touches.length >= 2) e.preventDefault()
 }, { passive: false })
 
-// Sound requires a user gesture on iOS — init lazily on first touch
-let soundReady = false
-async function ensureSound() {
-  if (soundReady) return
-  soundReady = true
-  await sound.init()
-}
-window.addEventListener('touchstart', ensureSound, { once: true })
-window.addEventListener('mousedown',  ensureSound, { once: true })
 
 // ── Landing model drag ────────────────────────────────────────
 canvas.addEventListener('touchstart', (e) => {
@@ -488,6 +489,7 @@ canvas.addEventListener('touchend', (e) => {
         activeAnchor  = tree.getAnchor(el)
         activeElement = el
         particles[el].start(el, activeAnchor.position.clone())
+        sound.trigger(el)
       }
     }
   }

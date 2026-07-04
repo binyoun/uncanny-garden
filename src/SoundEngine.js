@@ -1,17 +1,19 @@
-// Three sound layers for three collaborators.
-// Each layer is independently controllable so each artist can own one.
+// Per-element sound: each of the five elements has two clips —
+// a short "seed" accent (fires the instant the gesture is confirmed)
+// and a full "grow" track (starts at the same moment, runs the length
+// of the whole seed→grow→recede cycle).
 //
-// Layer A (lead):    drone / root tone — triggered on placement
-// Layer B (texture): granular / field recording — fades in during growth
-// Layer C (event):   one-shot accent sounds — triggered at full scale
-//
-// To add sound: assign an AudioBuffer to the matching slot in load().
+// Usage:
+//   await sound.init()
+//   await sound.loadElement('wood', { seed: '/audio/wood-seed.mp3', grow: '/audio/wood.mp3' })
+//   sound.trigger('wood')   // call once per placement / reactivation
 
 export class SoundEngine {
   constructor() {
     this._ctx = null
     this._masterGain = null
-    this._layers = { A: null, B: null, C: null }
+    this._buffers = {}      // { [element]: { seed: AudioBuffer, grow: AudioBuffer } }
+    this._activeNodes = {}  // { [element]: { seed: AudioBufferSourceNode, grow: AudioBufferSourceNode } }
     this._ready = false
   }
 
@@ -24,64 +26,51 @@ export class SoundEngine {
     return this
   }
 
-  // Load an audio file into a layer slot.
-  // layer: 'A' | 'B' | 'C'
-  async loadLayer(layer, url) {
+  // iOS/Safari suspend the context until a user gesture — call on first touch.
+  resume() {
+    if (this._ctx && this._ctx.state === 'suspended') this._ctx.resume()
+  }
+
+  async loadElement(element, { seed, grow }) {
     if (!this._ready) throw new Error('Call init() first')
+    const [seedBuf, growBuf] = await Promise.all([
+      this._decode(seed),
+      this._decode(grow),
+    ])
+    this._buffers[element] = { seed: seedBuf, grow: growBuf }
+  }
+
+  async _decode(url) {
     const res = await fetch(url)
-    const buf = await this._ctx.decodeAudioData(await res.arrayBuffer())
-    this._layers[layer] = buf
+    return this._ctx.decodeAudioData(await res.arrayBuffer())
   }
 
-  // Play layer A (drone) — call on placement confirmed
-  triggerPlacement() {
-    this._playLayer('A', { loop: true, fadeIn: 1.5 })
-  }
-
-  // Fade in layer B as growth progresses (0–1)
-  setGrowthProgress(t) {
-    if (!this._ready || !this._layers.B) return
-    if (!this._layerBNode) {
-      this._layerBNode = this._startLoop('B')
-      this._layerBGain = this._layerBNode._gain
-      this._layerBGain.gain.value = 0
+  // Call on gesture-confirmed (initial placement) and on dormant-orb reactivation.
+  // Plays the seed accent and the full growth track together.
+  trigger(element) {
+    if (!this._ready) return
+    const buf = this._buffers[element]
+    if (!buf) return
+    this._stopElement(element)
+    this._activeNodes[element] = {
+      seed: this._play(buf.seed),
+      grow: this._play(buf.grow),
     }
-    this._layerBGain.gain.setTargetAtTime(t, this._ctx.currentTime, 0.3)
   }
 
-  // One-shot accent when fully grown — call on growth complete
-  triggerFullGrown() {
-    this._playLayer('C', { loop: false })
-  }
-
-  stopAll() {
-    [this._layerANode, this._layerBNode, this._layerCNode].forEach((n) => {
-      if (n) try { n.stop() } catch {}
-    })
-    this._layerBNode = null
-    this._layerBGain = null
-  }
-
-  _playLayer(id, { loop = false, fadeIn = 0 } = {}) {
-    if (!this._ready || !this._layers[id]) return
+  _play(buffer) {
     const node = this._ctx.createBufferSource()
-    node.buffer = this._layers[id]
-    node.loop = loop
-
-    const gain = this._ctx.createGain()
-    gain.gain.value = fadeIn > 0 ? 0 : 1
-    if (fadeIn > 0) gain.gain.linearRampToValueAtTime(1, this._ctx.currentTime + fadeIn)
-
-    node._gain = gain
-    node.connect(gain).connect(this._masterGain)
+    node.buffer = buffer
+    node.connect(this._masterGain)
     node.start()
-
-    this[`_layer${id}Node`] = node
     return node
   }
 
-  _startLoop(id) {
-    return this._playLayer(id, { loop: true })
+  _stopElement(element) {
+    const nodes = this._activeNodes[element]
+    if (!nodes) return
+    Object.values(nodes).forEach((n) => { if (n) try { n.stop() } catch {} })
+    delete this._activeNodes[element]
   }
 
   get context() { return this._ctx }
