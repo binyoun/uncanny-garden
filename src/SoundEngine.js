@@ -3,10 +3,15 @@
 // and a full "grow" track (starts at the same moment, runs the length
 // of the whole seed→grow→recede cycle).
 //
+// Plus one ambient track ("tandem") for the final orbit stage, once all
+// five elements are grown — loops for as long as that stage is on screen.
+//
 // Usage:
 //   await sound.init()
 //   await sound.loadElement('wood', { seed: '/audio/wood-seed.mp3', grow: '/audio/wood.mp3' })
-//   sound.trigger('wood')   // call once per placement / reactivation
+//   sound.trigger('wood')          // call once per placement / reactivation
+//   await sound.loadAmbient('/audio/tandem.mp3')
+//   sound.triggerAmbient()         // call once, on entering the final orbit stage
 
 export class SoundEngine {
   constructor() {
@@ -14,6 +19,8 @@ export class SoundEngine {
     this._masterGain = null
     this._buffers = {}      // { [element]: { seed: AudioBuffer, grow: AudioBuffer } }
     this._activeNodes = {}  // { [element]: { seed: AudioBufferSourceNode, grow: AudioBufferSourceNode } }
+    this._ambientBuffer = null
+    this._ambientNode = null
     this._ready = false
   }
 
@@ -43,6 +50,28 @@ export class SoundEngine {
   async _decode(url) {
     const res = await fetch(url)
     return this._ctx.decodeAudioData(await res.arrayBuffer())
+  }
+
+  async loadAmbient(url) {
+    if (!this._ready) throw new Error('Call init() first')
+    this._ambientBuffer = await this._decode(url)
+  }
+
+  // Call once on entering the final orbit stage — loops until stopAmbient().
+  triggerAmbient() {
+    if (!this._ready || !this._ambientBuffer || this._ambientNode) return
+    const node = this._ctx.createBufferSource()
+    node.buffer = this._ambientBuffer
+    node.loop = true
+    node.connect(this._masterGain)
+    node.start()
+    this._ambientNode = node
+  }
+
+  stopAmbient() {
+    if (!this._ambientNode) return
+    try { this._ambientNode.stop() } catch {}
+    this._ambientNode = null
   }
 
   // Call on gesture-confirmed (initial placement) and on dormant-orb reactivation.

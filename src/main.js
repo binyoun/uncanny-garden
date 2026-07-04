@@ -122,12 +122,13 @@ const tracker = new HandTracker()
 const tree    = new GrowTree(scene)
 const sound   = new SoundEngine()
 
-sound.init().then(() =>
-  Promise.all(SEQUENCE.map((el) => sound.loadElement(el, {
+sound.init().then(() => Promise.all([
+  ...SEQUENCE.map((el) => sound.loadElement(el, {
     seed: `${BASE}audio/${el}-seed.mp3`,
     grow: `${BASE}audio/${el}.mp3`,
-  })))
-).catch((err) => console.warn('Sound load failed:', err))
+  })),
+  sound.loadAmbient(`${BASE}audio/tandem.mp3`),
+])).catch((err) => console.warn('Sound load failed:', err))
 
 // iOS/Safari suspend AudioContext until a user gesture
 window.addEventListener('touchstart', () => sound.resume(), { once: true })
@@ -264,6 +265,7 @@ function activateFinalState() {
   })
 
   orbitGroup.visible = true
+  sound.triggerAmbient()
   startOrbitDrag()
 }
 
