@@ -2,10 +2,14 @@ import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { GlitchPass } from 'three/addons/postprocessing/GlitchPass.js'
 import { HandTracker } from './HandTracker.js'
-import { GrowTree } from './GrowTree.js'
+import { GrowTree, SEED_HOLD_MS } from './GrowTree.js'
 import { ParticleSystem } from './ParticleSystem.js'
 import { SoundEngine } from './SoundEngine.js'
+import { HandPhotoSystem } from './HandPhoto.js'
 
 const BASE = import.meta.env.BASE_URL
 
@@ -36,6 +40,58 @@ const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerH
 camera.position.set(0, 0, 0)
 
 const raycaster = new THREE.Raycaster()
+
+// ── Post-processing: glitch bursts for the AR scene only ──────
+const composer = new EffectComposer(renderer)
+composer.addPass(new RenderPass(scene, camera))
+const glitchPass = new GlitchPass()
+glitchPass.enabled = false
+composer.addPass(glitchPass)
+
+let glitchBurstTimer = null
+// wild=true → intense full-frame corruption; wild=false → occasional, lighter
+function triggerGlitchBurst(durationMs = 350, wild = true) {
+  glitchPass.goWild  = wild
+  glitchPass.enabled = true
+  clearTimeout(glitchBurstTimer)
+  glitchBurstTimer = setTimeout(() => { glitchPass.enabled = false }, durationMs)
+}
+
+// Final-stage only: a hand appearing in frame glitches the orbiting models
+// themselves (scale/rotation jitter, see render loop) plus a screen burst.
+let handGlitchUntil = 0
+function triggerHandGlitch() {
+  triggerGlitchBurst(300, true)
+  handGlitchUntil = performance.now() + 260
+}
+
+// Final-stage only: touching one model mutates just that one, harder than
+// the ambient hand-wave jitter shared by all five. Each element's mutate
+// reflects its Wu Xing character — same idea as GrowTree's per-element
+// growth stutter: fire is quick and violent, earth is slow and heavy,
+// metal is a short sharp spike, water swells smoothly instead of jittering.
+// vertexWobbleAmp/imageGlitchAmp drive the same character on the model's own
+// surface (see ModelGlitch.js, wired via GrowTree's getMaterialUniforms);
+// flipChance is the odds this touch also mirror-flips the model.
+const MUTATE_PROFILES = {
+  wood:  { durationMs: 420, scaleAmp: 0.6, rotAmp: 0.8,  posAmp: 0.10, smooth: false, vertexWobbleAmp: 0.04, imageGlitchAmp: 0.55, flipChance: 0.10 },
+  fire:  { durationMs: 260, scaleAmp: 0.9, rotAmp: 1.3,  posAmp: 0.16, smooth: false, vertexWobbleAmp: 0.09, imageGlitchAmp: 0.85, flipChance: 0.40 },
+  earth: { durationMs: 700, scaleAmp: 0.4, rotAmp: 0.15, posAmp: 0.05, smooth: false, vertexWobbleAmp: 0.05, imageGlitchAmp: 0.60, flipChance: 0.10 },
+  metal: { durationMs: 180, scaleAmp: 0.8, rotAmp: 0.05, posAmp: 0.14, smooth: false, vertexWobbleAmp: 0.01, imageGlitchAmp: 0.70, flipChance: 0.50 },
+  water: { durationMs: 650, scaleAmp: 0.35, rotAmp: 0.5, posAmp: 0.08, smooth: true,  vertexWobbleAmp: 0.06, imageGlitchAmp: 0.45, flipChance: 0    },
+}
+const HAND_WAVE_SCALE = 0.55   // ambient all-five jitter is a lighter version of the same profile
+
+const mutateUntil   = {}   // element -> timestamp
+const mutateStart   = {}   // element -> timestamp, for the smooth (water) envelope
+const mutateFlipped = {}   // element -> bool, this touch mirror-flipped the model
+function mutateModel(element) {
+  const profile = MUTATE_PROFILES[element] ?? MUTATE_PROFILES.wood
+  triggerGlitchBurst(Math.min(profile.durationMs, 300), false)
+  mutateStart[element]   = performance.now()
+  mutateUntil[element]   = mutateStart[element] + profile.durationMs
+  mutateFlipped[element] = Math.random() < profile.flipChance
+}
 
 // ── Intro scene ───────────────────────────────────────────────
 const introScene  = new THREE.Scene()
@@ -118,9 +174,10 @@ function cardinalWorldPos(element) {
 }
 
 // ── AR modules ────────────────────────────────────────────────
-const tracker = new HandTracker()
-const tree    = new GrowTree(scene)
-const sound   = new SoundEngine()
+const tracker    = new HandTracker()
+const tree       = new GrowTree(scene)
+const sound      = new SoundEngine()
+const handPhotos = new HandPhotoSystem(scene)
 
 sound.init().then(() => Promise.all([
   ...SEQUENCE.map((el) => sound.loadElement(el, {
@@ -158,6 +215,7 @@ const promptGesture = document.getElementById('prompt-gesture')
 const palmRing      = document.getElementById('palm-ring')
 const progressArc   = palmRing.querySelector('circle.progress')
 const CIRCUMFERENCE = 2 * Math.PI * 35
+const finalHint      = document.getElementById('final-hint')
 
 const ELEMENT_RING_COLORS = {
   wood:  '#00cc44',
@@ -239,22 +297,25 @@ function onElementComplete(el) {
 }
 
 // ── Final orbit state ─────────────────────────────────────────
-const ORBIT_SCALE  = 0.75
-const ORBIT_RADIUS = 1.0
+const ORBIT_SCALE  = 1.2
+const ORBIT_RADIUS = 2.3
+const orbitBaseX   = {}   // element -> base circle X, so jitter can offset it instead of replacing it
 
 function activateFinalState() {
   allComplete = true
   hidePrompt()
   hidePalmRing()
-  tracker.stop()
+  tracker.start()   // keep detecting hands — any hand now glitches the orbiting models
   tree.hideAllOrbs()
+  finalHint.classList.add('visible')
 
   SEQUENCE.forEach((el, i) => {
     const angle  = (i / SEQUENCE.length) * Math.PI * 2
     const anchor = tree.getAnchor(el)
     scene.remove(anchor)
     orbitGroup.add(anchor)
-    anchor.position.set(Math.cos(angle) * ORBIT_RADIUS, 0, Math.sin(angle) * ORBIT_RADIUS)
+    orbitBaseX[el] = Math.cos(angle) * ORBIT_RADIUS
+    anchor.position.set(orbitBaseX[el], 0, Math.sin(angle) * ORBIT_RADIUS)
     anchor.rotation.set(0, 0, 0)
     anchor.scale.setScalar(ORBIT_SCALE)
     anchor.visible = true
@@ -274,7 +335,18 @@ const ORBIT_DRAG_SENSITIVITY = 0.011   // rad per px, ring spin from 1-finger dr
 const ORBIT_TILT_SENSITIVITY = 0.006   // rad per px, ring tilt from 1-finger drag
 const ORBIT_TILT_LIMIT       = 0.65    // rad, max tilt either way (~37°)
 const ORBIT_ZOOM_MIN         = 0.2     // pinch-zoom scale clamp
-const ORBIT_ZOOM_MAX         = 3.2
+const ORBIT_ZOOM_MAX         = 7.2
+const TOUCH_RADIUS_PX        = 130   // how close the tracked palm must be on-screen to "touch" a model
+
+// Projects a world position to screen pixels, using the same convention as
+// updatePalmRing() (palm.x flipped) so the two line up for touch detection.
+function worldToScreenPx(worldPos) {
+  const ndc = worldPos.clone().project(camera)
+  return {
+    x: (ndc.x + 1) / 2 * window.innerWidth,
+    y: (1 - ndc.y) / 2 * window.innerHeight,
+  }
+}
 
 function startOrbitDrag() {
   let prevX = 0, prevY = 0
@@ -334,15 +406,33 @@ function startOrbitDrag() {
 }
 
 // ── Hand tracker events ───────────────────────────────────────
-tracker.addEventListener('hand-lost', () => { hidePalmRing() })
+let handPresent = false   // tracks rising edge for the final-stage hand glitch
+let lastPalm    = null    // most recent palm position, for final-stage touch detection
+
+tracker.addEventListener('hand-lost', () => {
+  hidePalmRing()
+  handPresent = false
+  lastPalm    = null
+})
+
+tracker.addEventListener('hand-detected', (e) => {
+  lastPalm = e.detail.palm
+  if (!allComplete) return
+  if (!handPresent) {
+    handPresent = true
+    triggerHandGlitch()
+  }
+})
 
 tracker.addEventListener('hold-progress', (e) => {
+  if (allComplete) return
   const { progress, palm, element } = e.detail
   if (element !== currentElement()) { hidePalmRing(); return }
   updatePalmRing(palm, progress, element)
 })
 
 tracker.addEventListener('gesture-confirmed', (e) => {
+  if (allComplete) return
   const { element } = e.detail
   if (element !== currentElement()) return
 
@@ -356,6 +446,14 @@ tracker.addEventListener('gesture-confirmed', (e) => {
   activeElement = element
   particles[element].start(element, worldPos)
   sound.trigger(element)
+
+  // Snapshot of the hand that just summoned this element — glitches apart
+  // and dissolves right as the model starts growing (seed→grow handoff).
+  handPhotos.spawn(element, video, worldPos)
+  setTimeout(() => {
+    handPhotos.collapse(element)
+    triggerGlitchBurst(450, true)
+  }, SEED_HOLD_MS)
   // Next prompt shows only after this model fully grows and disappears
 })
 
@@ -594,6 +692,9 @@ renderer.setAnimationLoop(() => {
     const t = clock.elapsedTime
     orbitGroup.rotation.y += 0.0045   // ring auto-rotation
 
+    const nowMs      = performance.now()
+    const handGlitch = nowMs < handGlitchUntil
+
     SEQUENCE.forEach((el, i) => {
       const anchor    = tree.getAnchor(el)
       const phase     = (i / SEQUENCE.length) * Math.PI * 2
@@ -603,24 +704,71 @@ renderer.setAnimationLoop(() => {
       anchor.rotation.y += 0.005
       anchor.rotation.x  = Math.sin(t * 0.28 + phase * 0.7) * 0.14
       anchor.rotation.z  = Math.sin(t * 0.19 + phase * 1.2) * 0.07
-      const pulse = 1 + Math.sin(t * 0.65 + phase) * 0.07 + Math.sin(t * 0.31 + phase) * 0.04
-      anchor.scale.setScalar(ORBIT_SCALE * pulse)
+      let pulse = 1 + Math.sin(t * 0.65 + phase) * 0.07 + Math.sin(t * 0.31 + phase) * 0.04
+
+      // touching this one model mutates it harder than the ambient hand-wave jitter
+      const mutateProfile = MUTATE_PROFILES[el] ?? MUTATE_PROFILES.wood
+      const mutating = mutateUntil[el] && nowMs < mutateUntil[el]
+      let uGlitch = 0
+      let flipped = false
+
+      if (mutating) {
+        // water swells smoothly; the rest jitter at full strength for the whole window
+        let envelope = 1
+        if (mutateProfile.smooth) {
+          const p = (nowMs - mutateStart[el]) / mutateProfile.durationMs
+          envelope = Math.sin(Math.min(Math.max(p, 0), 1) * Math.PI)
+        }
+        pulse            *= 1 + (Math.random() - 0.5) * mutateProfile.scaleAmp * envelope
+        anchor.rotation.y += (Math.random() - 0.5) * mutateProfile.rotAmp * envelope
+        anchor.position.x  = orbitBaseX[el] + (Math.random() - 0.5) * mutateProfile.posAmp * envelope
+        uGlitch = envelope * mutateProfile.imageGlitchAmp
+        flipped = mutateFlipped[el] ?? false
+      } else if (handGlitch) {
+        // a hand in frame corrupts all five, not just the screen — a lighter,
+        // ambient version of each model's own mutate character (no mirror-flip;
+        // that stays reserved for a deliberate touch)
+        pulse            *= 1 + (Math.random() - 0.5) * mutateProfile.scaleAmp * HAND_WAVE_SCALE
+        anchor.rotation.y += (Math.random() - 0.5) * mutateProfile.rotAmp * HAND_WAVE_SCALE
+        anchor.position.x  = orbitBaseX[el] + (Math.random() - 0.5) * mutateProfile.posAmp * HAND_WAVE_SCALE
+        uGlitch = mutateProfile.imageGlitchAmp * HAND_WAVE_SCALE
+      } else {
+        anchor.position.x = orbitBaseX[el]
+      }
+
+      for (const u of tree.getMaterialUniforms(el)) {
+        u.uGlitch.value    = uGlitch
+        u.uWobbleAmp.value = mutateProfile.vertexWobbleAmp
+        u.uTime.value      = t
+      }
+
+      const finalScale = ORBIT_SCALE * pulse
+      anchor.scale.set(flipped ? -finalScale : finalScale, finalScale, finalScale)
 
       const worldPos = new THREE.Vector3()
       anchor.getWorldPosition(worldPos)
       particles[el].setOrigin(worldPos)
       particles[el].update(0.5, delta)
+
+      // real hand in the camera view overlapping this model on screen = touch
+      if (lastPalm) {
+        const palmPx  = { x: (1 - lastPalm.x) * window.innerWidth, y: lastPalm.y * window.innerHeight }
+        const modelPx = worldToScreenPx(worldPos)
+        const dx = palmPx.x - modelPx.x, dy = palmPx.y - modelPx.y
+        if (Math.sqrt(dx * dx + dy * dy) < TOUCH_RADIUS_PX) mutateModel(el)
+      }
     })
 
   } else {
     const progressMap = tree.update()
 
-    for (const [el, { progress, phase }] of Object.entries(progressMap)) {
+    for (const [el, { progress, phase, glitch }] of Object.entries(progressMap)) {
       if (phase === 'dormant') {
-        // first frame entering dormant: stop particles, advance sequence
+        // first frame entering dormant: model + particles collapse into the orb
         if (!dormantEls.has(el)) {
           dormantEls.add(el)
           particles[el].stop()
+          triggerGlitchBurst(500, true)
           if (!completedEls.has(el)) {
             completedEls.add(el)
             onElementComplete(el)
@@ -630,11 +778,14 @@ renderer.setAnimationLoop(() => {
         // seed / grow / recede — keep particles alive
         dormantEls.delete(el)
         particles[el].update(progress, delta)
+        if (glitch) triggerGlitchBurst(120, false)
       }
     }
   }
 
-  renderer.render(scene, camera)
+  handPhotos.update()
+
+  composer.render()
 })
 
 // ── Resize ────────────────────────────────────────────────────
@@ -644,4 +795,5 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix()
   introCamera.updateProjectionMatrix()
   renderer.setSize(w, h)
+  composer.setSize(w, h)
 })

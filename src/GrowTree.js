@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { patchMaterialForGlitch } from './ModelGlitch.js'
 
 const SEED_SCALE = 0.004
 const FULL_SCALE = 1.0     // reduced from 2.0 — was too large
@@ -8,7 +9,25 @@ const SEED_HOLD  = 2000
 const GROW_MS    = 36000   // 36 s — slow organic bloom
 const RECEDE_MS  = 2500
 
+// Periodic "corruption" stutter during grow — breaks up the smooth easing
+// with brief scale/rotation glitches so the bloom doesn't read as too clean.
+// Each element's stutter reflects its Wu Xing character: fire is fast and
+// sharp, earth is rare and heavy, metal is brief and rigid (no rotation
+// wobble), water swells smoothly instead of snapping.
+// vertexWobbleAmp/imageGlitchAmp drive the same character on the model's own
+// surface (see ModelGlitch.js); flipChance is the odds a given stutter also
+// mirror-flips the model (rare/sharp for metal and fire, off for water).
+const GLITCH_PROFILES = {
+  wood:  { stutterMs: 110, intervalMin: 1400, intervalMax: 3000, scaleAmp: 0.22, rotAmp: 0.5,  smooth: false, vertexWobbleAmp: 0.02,  imageGlitchAmp: 0.35, flipChance: 0.05 },
+  fire:  { stutterMs: 70,  intervalMin: 700,  intervalMax: 1600, scaleAmp: 0.34, rotAmp: 0.9,  smooth: false, vertexWobbleAmp: 0.05,  imageGlitchAmp: 0.60, flipChance: 0.25 },
+  earth: { stutterMs: 220, intervalMin: 2600, intervalMax: 4600, scaleAmp: 0.30, rotAmp: 0.12, smooth: false, vertexWobbleAmp: 0.035, imageGlitchAmp: 0.45, flipChance: 0.05 },
+  metal: { stutterMs: 55,  intervalMin: 1500, intervalMax: 3000, scaleAmp: 0.28, rotAmp: 0.0,  smooth: false, vertexWobbleAmp: 0.005, imageGlitchAmp: 0.50, flipChance: 0.35 },
+  water: { stutterMs: 260, intervalMin: 1800, intervalMax: 3400, scaleAmp: 0.16, rotAmp: 0.3,  smooth: true,  vertexWobbleAmp: 0.03,  imageGlitchAmp: 0.30, flipChance: 0    },
+}
+
 export const SEED_HOLD_MS = SEED_HOLD
+
+function randRange(min, max) { return min + Math.random() * (max - min) }
 
 const ELEMENT_COLORS = {
   wood:  0x00cc44,
@@ -77,9 +96,10 @@ function makeOrb(scene, element) {
 
 export class GrowTree {
   constructor(scene) {
-    this._scene  = scene
-    this._models = {}
-    this._state  = {}
+    this._scene             = scene
+    this._models            = {}
+    this._state             = {}
+    this._materialUniforms  = {}   // element -> array of uniforms objects (one per mesh material)
   }
 
   load(paths, onEach) {
@@ -95,12 +115,21 @@ export class GrowTree {
       const loader = new GLTFLoader()
       loader.setMeshoptDecoder(MeshoptDecoder)
       loader.load(path, (gltf) => {
-        const model = gltf.scene
+        const model   = gltf.scene
+        const profile = GLITCH_PROFILES[element] ?? GLITCH_PROFILES.wood
+        const uniformsList = []
         model.traverse((n) => {
           if (!n.isMesh) return
           const mats = Array.isArray(n.material) ? n.material : [n.material]
-          mats.forEach((m) => { m.side = THREE.DoubleSide; m.depthWrite = true })
+          mats.forEach((m) => {
+            m.side = THREE.DoubleSide
+            m.depthWrite = true
+            const uniforms = patchMaterialForGlitch(m, ELEMENT_COLORS[element])
+            uniforms.uWobbleAmp.value = profile.vertexWobbleAmp
+            uniformsList.push(uniforms)
+          })
         })
+        this._materialUniforms[element] = uniformsList
         const box    = new THREE.Box3().setFromObject(model)
         const size   = box.getSize(new THREE.Vector3())
         const max    = Math.max(size.x, size.y, size.z)
@@ -126,12 +155,21 @@ export class GrowTree {
 
     const orb = makeOrb(this._scene, element)
 
+    const profile = GLITCH_PROFILES[element] ?? GLITCH_PROFILES.wood
+
     this._state[element] = {
       anchor, orb,
       phase:        'seed',
       phaseStart:   null,
       lastProgress: 0,
       seedTimer:    null,
+      nextGlitchAt: randRange(profile.intervalMin, profile.intervalMax),
+      glitchActive: false,
+      glitchStart:  0,
+      glitchUntil:  0,
+      glitchScaleJitter: 1,
+      glitchRotJitter:   0,
+      flipped:      false,
     }
 
     this._state[element].seedTimer = setTimeout(() => {
@@ -175,16 +213,54 @@ export class GrowTree {
 
       if (state.phase === 'grow') {
         if (elapsed < GROW_MS) {
-          const t = elapsed / GROW_MS
-          state.anchor.scale.setScalar(SEED_SCALE + (FULL_SCALE - SEED_SCALE) * easeOutCubic(t))
-          state.anchor.rotation.y += 0.006
+          const t       = elapsed / GROW_MS
+          const profile = GLITCH_PROFILES[element] ?? GLITCH_PROFILES.wood
+          let glitchStarted = false
+
+          if (!state.glitchActive && elapsed >= state.nextGlitchAt) {
+            state.glitchActive       = true
+            state.glitchStart        = elapsed
+            state.glitchUntil        = elapsed + profile.stutterMs
+            state.glitchScaleJitter  = (Math.random() - 0.5) * profile.scaleAmp
+            state.glitchRotJitter    = (Math.random() - 0.5) * profile.rotAmp
+            state.flipped            = Math.random() < profile.flipChance
+            glitchStarted = true
+          } else if (state.glitchActive && elapsed >= state.glitchUntil) {
+            state.glitchActive = false
+            state.flipped      = false
+            state.nextGlitchAt = elapsed + randRange(profile.intervalMin, profile.intervalMax)
+          }
+
+          // water swells smoothly in and out; the rest snap to full strength and hold
+          let envelope = 1
+          if (state.glitchActive && profile.smooth) {
+            const p = (elapsed - state.glitchStart) / profile.stutterMs
+            envelope = Math.sin(Math.min(p, 1) * Math.PI)
+          }
+
+          let scale = SEED_SCALE + (FULL_SCALE - SEED_SCALE) * easeOutCubic(t)
+          if (state.glitchActive) scale *= 1 + state.glitchScaleJitter * envelope
+
+          state.anchor.scale.set(state.flipped ? -scale : scale, scale, scale)
+          state.anchor.rotation.y += 0.006 + (state.glitchActive ? state.glitchRotJitter * envelope : 0)
           state.anchor.rotation.x = Math.sin(elapsed * 0.00025) * 0.25
           state.anchor.rotation.z = Math.sin(elapsed * 0.00018 + 1.2) * 0.1
+
+          const uGlitch = state.glitchActive ? envelope * profile.imageGlitchAmp : 0
+          for (const u of this._materialUniforms[element] ?? []) {
+            u.uGlitch.value = uGlitch
+            u.uTime.value   = t_s
+          }
           state.lastProgress = easeOutCubic(t) * 0.8
+          result[element] = { progress: state.lastProgress, phase: state.phase, glitch: glitchStarted }
+          continue
         } else {
           state.phase        = 'recede'
           state.phaseStart   = now
           state.lastProgress = 0.8
+          state.glitchActive = false
+          state.flipped      = false
+          for (const u of this._materialUniforms[element] ?? []) u.uGlitch.value = 0
         }
 
       } else if (state.phase === 'recede') {
@@ -220,8 +296,12 @@ export class GrowTree {
     state.anchor.rotation.set(0, 0, 0)
     state.anchor.scale.setScalar(SEED_SCALE)
     state.anchor.visible = true
+    const profile = GLITCH_PROFILES[element] ?? GLITCH_PROFILES.wood
     state.phase          = 'seed'
     state.lastProgress   = 0
+    state.nextGlitchAt   = randRange(profile.intervalMin, profile.intervalMax)
+    state.glitchActive   = false
+    state.flipped        = false
     state.seedTimer = setTimeout(() => {
       state.phase      = 'grow'
       state.phaseStart = performance.now()
@@ -243,6 +323,7 @@ export class GrowTree {
   }
 
   getAnchor(element) { return this._state[element]?.anchor }
+  getMaterialUniforms(element) { return this._materialUniforms[element] ?? [] }
   isPlaced(element)  { return !!this._state[element] }
   get placedCount()  { return Object.keys(this._state).length }
 }
