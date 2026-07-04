@@ -270,6 +270,12 @@ function activateFinalState() {
 }
 
 // ── Drag / pinch for final orbit ─────────────────────────────
+const ORBIT_DRAG_SENSITIVITY = 0.011   // rad per px, ring spin from 1-finger drag
+const ORBIT_TILT_SENSITIVITY = 0.006   // rad per px, ring tilt from 1-finger drag
+const ORBIT_TILT_LIMIT       = 0.65    // rad, max tilt either way (~37°)
+const ORBIT_ZOOM_MIN         = 0.2     // pinch-zoom scale clamp
+const ORBIT_ZOOM_MAX         = 3.2
+
 function startOrbitDrag() {
   let prevX = 0, prevY = 0
   let oPinchLast = 0   // 0 = no active pinch
@@ -291,7 +297,7 @@ function startOrbitDrag() {
         // spread = ring expands (models further); pinch = ring contracts (closer)
         // flipped: spread = ring contracts (models closer), pinch = expands (further)
         const ratio = oPinchLast / px
-        const next  = THREE.MathUtils.clamp(orbitGroup.scale.x * ratio, 0.3, 2.5)
+        const next  = THREE.MathUtils.clamp(orbitGroup.scale.x * ratio, ORBIT_ZOOM_MIN, ORBIT_ZOOM_MAX)
         orbitGroup.scale.setScalar(next)
       }
       oPinchLast = px
@@ -299,9 +305,9 @@ function startOrbitDrag() {
       oPinchLast = 0
       const dx = e.touches[0].clientX - prevX
       const dy = e.touches[0].clientY - prevY
-      orbitGroup.rotation.y += dx * 0.007
+      orbitGroup.rotation.y += dx * ORBIT_DRAG_SENSITIVITY
       orbitGroup.rotation.x = THREE.MathUtils.clamp(
-        orbitGroup.rotation.x + dy * 0.004, -0.45, 0.45
+        orbitGroup.rotation.x + dy * ORBIT_TILT_SENSITIVITY, -ORBIT_TILT_LIMIT, ORBIT_TILT_LIMIT
       )
       prevX = e.touches[0].clientX
       prevY = e.touches[0].clientY
@@ -319,9 +325,9 @@ function startOrbitDrag() {
   renderer.domElement.addEventListener('mouseup', () => { mouseDown = false })
   renderer.domElement.addEventListener('mousemove', (e) => {
     if (!mouseDown) return
-    orbitGroup.rotation.y += (e.clientX - prevX) * 0.007
+    orbitGroup.rotation.y += (e.clientX - prevX) * ORBIT_DRAG_SENSITIVITY
     orbitGroup.rotation.x = THREE.MathUtils.clamp(
-      orbitGroup.rotation.x + (e.clientY - prevY) * 0.004, -0.45, 0.45
+      orbitGroup.rotation.x + (e.clientY - prevY) * ORBIT_TILT_SENSITIVITY, -ORBIT_TILT_LIMIT, ORBIT_TILT_LIMIT
     )
     prevX = e.clientX; prevY = e.clientY
   })
@@ -586,7 +592,7 @@ renderer.setAnimationLoop(() => {
 
   if (allComplete) {
     const t = clock.elapsedTime
-    orbitGroup.rotation.y += 0.003   // slow ring auto-rotation
+    orbitGroup.rotation.y += 0.0045   // ring auto-rotation
 
     SEQUENCE.forEach((el, i) => {
       const anchor    = tree.getAnchor(el)
