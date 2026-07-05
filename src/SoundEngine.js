@@ -29,6 +29,7 @@ export class SoundEngine {
     this._ambientNode = null
     this._introBuffer = null
     this._introNode = null
+    this._introPending = false
     this._ready = false
   }
 
@@ -63,6 +64,7 @@ export class SoundEngine {
   async loadAmbient(url) {
     if (!this._ready) throw new Error('Call init() first')
     this._ambientBuffer = await this._decode(url)
+    this._tryPendingIntro()
   }
 
   // Call once on entering the final orbit stage — loops until stopAmbient().
@@ -86,20 +88,38 @@ export class SoundEngine {
   async loadIntro(url) {
     if (!this._ready) throw new Error('Call init() first')
     this._introBuffer = await this._decode(url)
+    this._tryPendingIntro()
   }
 
   // Call once on "Tap to Begin" — one-shot, does not loop. Uses the dedicated
-  // intro clip if loaded, otherwise falls back to the tandem track.
+  // intro clip if loaded, otherwise falls back to the tandem track. If
+  // neither has finished loading yet (likely — this fires the instant the
+  // visitor taps, while audio is still being fetched/decoded), it plays as
+  // soon as one becomes available instead of silently doing nothing.
   triggerIntro() {
     if (!this._ready) return
     const buffer = this._introBuffer || this._ambientBuffer
+    if (buffer) {
+      this._introNode = this._play(buffer)
+    } else {
+      this._introPending = true
+    }
+  }
+
+  _tryPendingIntro() {
+    if (!this._introPending) return
+    const buffer = this._introBuffer || this._ambientBuffer
     if (!buffer) return
+    this._introPending = false
     this._introNode = this._play(buffer)
   }
 
-  // Cuts the intro cue short if it's still playing — called automatically
-  // by trigger() so it can never overlap the first element's sound.
+  // Cuts the intro cue short if it's still playing (or cancels it if it
+  // hasn't started yet) — called automatically by trigger() so it can never
+  // overlap the first element's sound, even if that fires before intro
+  // audio finished loading.
   stopIntro() {
+    this._introPending = false
     if (!this._introNode) return
     try { this._introNode.stop() } catch {}
     this._introNode = null
