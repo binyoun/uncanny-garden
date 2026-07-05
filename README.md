@@ -17,7 +17,7 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 7. One-finger drag rotates and lifts the model. Two-finger pinch moves it closer or further along the line of sight.
 8. When growth completes the model recedes (with a screen-wide glitch burst as it collapses), leaving behind a dormant particle orb (3 drifting colored particles). Tap the orb to reactivate and re-grow that element while others continue.
 9. After all five elements complete, a final stage activates: all five models orbit the viewer in a ring, sized to fill the frame without crowding it.
-10. In the final stage, drag to spin and tilt the ring; pinch to contract or expand it (now with a much wider zoom range). Hand tracking stays active here: any hand in frame gives all five a light ambient glitch ("Reach to Mutate" appears on screen), and reaching toward one specific model -- tracked via the camera, not a screen tap -- mutates just that one, harder and in its own elemental style.
+10. In the final stage, drag to spin and tilt the ring; pinch to contract or expand it (now with a much wider zoom range). Hand tracking stays active here: any hand in frame gives all five a light ambient glitch ("Reach the Flowergirls" appears on screen), and reaching toward one specific model -- tracked via the camera, not a screen tap -- mutates just that one, harder and in its own elemental style. The mutation is permanent and cumulative: each touch distorts the model further along a random axis and raises a floor of surface corruption that never fully clears (both capped so repeated touching can't spiral), and re-captures the participant's hand at the point of contact, the same photo-to-kaleidoscope treatment as the original summoning.
 
 ## Gesture Map
 
@@ -51,7 +51,7 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 | 2-finger spread | Contract ring (models closer) |
 | 2-finger pinch | Expand ring (models further, wide zoom range) |
 | Any hand in camera frame | Light ambient glitch across all five models |
-| Reach toward a specific model | Localized "mutate" glitch on just that model, styled to its element |
+| Reach toward a specific model | Localized, permanent "mutate" -- axis distortion + residual glitch that accumulate across touches, styled to that element; also re-captures the participant's hand |
 
 ---
 
@@ -65,7 +65,7 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 - **Dormant orbs** -- 3-particle swirling cluster per element using the same glow texture; transparent `SphereGeometry` hitbox for reliable tap raycasting
 - **Audio** -- `SoundEngine` (Web Audio API): per-element growth track + one-shot seed accent triggered together on placement, plus a looping ambient "tandem" track for the final orbit stage
 - **Hand-photo capture** -- `HandPhoto` captures the participant's hand from the camera feed at the moment of gesture-confirm, masked into a soft seed-shaped oval, then folds into a spinning kaleidoscope and dissolves as the real model grows in
-- **Glitch system** -- Layered across three levels: a screen-wide `EffectComposer` + `GlitchPass` burst; rigid-body scale/rotation/position jitter on each model's anchor; and `ModelGlitch`, which patches each model's own material (`onBeforeCompile`) for surface-level color corruption and a vertex-shader wobble. All three read from shared per-element "personality" profiles matched to Wu Xing character -- fire is fast and violent, earth is rare and heavy, metal is brief and rigid with sharp mirror-flips, water swells smoothly instead of snapping, wood is the moderate baseline
+- **Glitch system** -- Layered across three levels: a screen-wide `EffectComposer` + `GlitchPass` burst; rigid-body scale/rotation/position jitter on each model's anchor; and `ModelGlitch`, which patches each model's own material (`onBeforeCompile`) for surface-level color corruption and a vertex-shader wobble. All three read from shared per-element "personality" profiles matched to elemental character -- fire is fast and violent, earth is rare and heavy, metal is brief and rigid with sharp mirror-flips, water swells smoothly instead of snapping, wood is the moderate baseline. In the final orbit stage, touch-mutation is additionally permanent and cumulative: non-uniform axis distortion plus a residual glitch floor that never fully clears, both capped per element
 - **Fonts** -- Cinzel Decorative (title, gesture prompts, final-stage hint), Josefin Sans (credits, sound/warning copy)
 - **Build** -- Vite 5.4, `base: '/'` for custom domain
 - **Deploy** -- GitHub Actions → GitHub Pages → custom domain `uncanny.live`
@@ -167,7 +167,7 @@ git config http.postBuffer 524288000
 
 ## Five Elements Reference
 
-The work is structured around 오행 (五行, Wu Xing) -- the classical East Asian system of five elemental phases: Wood (목), Fire (화), Soil (토), Metal (금), Water (수). Each element is associated with a cardinal direction, season, color, and body of correspondences, here mapped to hand gesture, 3D form, spatial position, sound, and glitch character in the AR field.
+The work is structured around an ancient elemental cosmology (木火土金水): Wood (목), Fire (화), Soil (토), Metal (금), Water (수). Each element is associated with a cardinal direction, season, color, and body of correspondences, here mapped to hand gesture, 3D form, spatial position, sound, and glitch character in the AR field.
 
 ---
 
