@@ -305,7 +305,7 @@ const preloadScreen = document.getElementById('preload-screen')
 let landingStartTime = null
 let tappedBegin = false
 
-function beginExperience() {
+async function beginExperience() {
   if (tappedBegin) return
   tappedBegin = true
   sound.resume()
@@ -314,6 +314,21 @@ function beginExperience() {
   startTyping()
   landingStartTime = Date.now()
   maybeEnterAR()
+
+  // Requested here, not on page load — desktop Safari silently withholds
+  // the camera permission prompt unless getUserMedia is called synchronously
+  // within a user gesture. Mobile Safari is more lenient, which is why this
+  // only ever showed up on the laptop.
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+      audio: false,
+    })
+    video.srcObject = stream
+    video.play()
+  } catch (err) {
+    console.warn('Camera denied:', err)
+  }
 }
 
 preloadScreen.addEventListener('touchstart', beginExperience, { once: true })
@@ -727,40 +742,28 @@ canvas.addEventListener('mousemove', (e) => {
 })
 
 // ── Initialise everything on page load ────────────────────────
-;(async () => {
-  // Camera — video getUserMedia doesn't require a user gesture
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-      audio: false,
-    })
-    video.srcObject = stream
-    video.play()
-  } catch (err) {
-    console.warn('Camera denied:', err)
-  }
+// Camera is requested from beginExperience() instead (see "Tap to Begin"
+// above) — tracker/model loading don't need a user gesture, so they start
+// immediately in parallel while the landing screen is up.
+tracker.init().then(() => {
+  trackerReady = true
+  maybeEnterAR()
+})
 
-  // Tracker and models load in parallel; enter AR when both conditions met
-  tracker.init().then(() => {
-    trackerReady = true
+tree.load(
+  {
+    wood:  `${BASE}models/tree.glb`,
+    fire:  `${BASE}models/fire.glb`,
+    earth: `${BASE}models/earth.glb`,
+    metal: `${BASE}models/metal.glb`,
+    water: `${BASE}models/water.glb`,
+  },
+  () => {
+    loadedCount++
+    loadingLabel.textContent = `loading ${loadedCount} / 5`
     maybeEnterAR()
-  })
-
-  tree.load(
-    {
-      wood:  `${BASE}models/tree.glb`,
-      fire:  `${BASE}models/fire.glb`,
-      earth: `${BASE}models/earth.glb`,
-      metal: `${BASE}models/metal.glb`,
-      water: `${BASE}models/water.glb`,
-    },
-    () => {
-      loadedCount++
-      loadingLabel.textContent = `loading ${loadedCount} / 5`
-      maybeEnterAR()
-    }
-  )
-})()
+  }
+)
 
 // ── Render loop ───────────────────────────────────────────────
 const clock = new THREE.Clock()
