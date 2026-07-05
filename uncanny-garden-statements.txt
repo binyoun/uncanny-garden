@@ -1,0 +1,53 @@
+UNCANNY GARDEN
+Randi Matushevitz · Bin Youn · Gustavo Guzmán
+2026
+
+
+─────────────────────────────────────────────
+SHORT STATEMENT (50 words)
+─────────────────────────────────────────────
+
+Uncanny Garden is a collaborative augmented reality and sound work inspired by Randi Matushevitz's Flowergirls (2026) and Limelight (2026). Participants summon five Flowergirls through hand gestures rooted in ancient elemental cosmology (木火土金水), each seeding, blooming, becoming. A mediated ritual exploring fertility, transformation, and the nature of self in a surrealist botanical world.
+
+
+─────────────────────────────────────────────
+ARTIST STATEMENT (200 words)
+─────────────────────────────────────────────
+
+Uncanny Garden emerges from a collaboration between Techspressionist visual artist Randi Matushevitz, AR artist Bin Youn, and sound composer Gustavo Guzmán. Rooted in Matushevitz's ongoing exploration of the Flowergirl figure, the work extends her visual world into augmented space and original sound.
+
+Drawing from both Western and East Asian elemental philosophies, the work maps five elemental energies onto hand gesture, 3D botanical form, and spatial position within an augmented reality field. Each element carries its cardinal direction, season, and color into a surrealist landscape inhabited by the Maiden archetype: the flower girl, seeding, blooming, transforming. Participants summon each figure through sustained gesture, becoming co-authors in a mediated ritual.
+
+At its center, Uncanny Garden holds the ancient fertility symbol not as a relic but as an uncanny living presence. The work holds space for duality: interior and exterior self, the imagined and the real, what we reveal and what we conceal. The grandiose self and the shadow self can coexist.
+
+Techspressionism provides the philosophical ground for this encounter between the digital and the elemental. What is old is made new: ancient ritual, spirit, and myth experienced through contemporary technology, art, and music as a 21st-century act of seeing and becoming.
+
+
+─────────────────────────────────────────────
+TECHNICAL STATEMENT (200 words: 150 AR + 50 Sound)
+─────────────────────────────────────────────
+
+Uncanny Garden is a browser-based augmented reality experience requiring no application installation. Activated by QR code in a standard mobile browser, the work uses the device camera for real-time hand tracking and spatial AR.
+
+A custom gesture classifier maps five hand positions across ancient elemental cosmology (木火土金水): open palm to Wood, raised index to Fire, closed fist to Soil, peace sign to Metal, and OK ring to Water. A 1.5-second hold-confirm creates a deliberate moment before each summoning.
+
+Three.js renders the environment with filmic tone mapping and image-based lighting. A four-phase state machine governs each figure: seed, grow (36 seconds), recede, and dormant. In the dormant state, a glowing particle orb persists; tapping it reactivates the cycle. Touch controls allow one-finger rotation and two-finger depth movement; in the final stage, all five figures form a ring surrounding the viewer, navigable by drag and pinch. The work deploys at uncanny.live.
+
+[SOUND — Gustavo Guzmán — 50 words]
+
+
+─────────────────────────────────────────────
+NOTE FOR RANDI
+─────────────────────────────────────────────
+
+Hi Randi,
+
+I worked from your statement as the foundation and want to share what I revised and why, so you can push back on anything.
+
+The main change: I removed "video" from the medium label in the short and artist statements. Listing AR, video, and sound together implies three separate works of equal weight. Since our video lives inside the AR environment rather than alongside it, naming it separately undersells the AR as the primary experience. I moved the mention of video into the technical statement, where it appears as a presentation format.
+
+In the artist statement I kept your language closely, including the Maiden archetype, the duality framing (grandiose self and shadow self), and your closing line about ancient ritual made new. I added a short opening paragraph naming all three of us as collaborators and grounding the work in your Flowergirl practice.
+
+The voice is meant to feel like all three of us, rather than any one author. If anything reads against your intention or loses something important from your original, please let me know and we can restore it.
+
+Bin
