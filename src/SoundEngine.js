@@ -6,12 +6,18 @@
 // Plus one ambient track ("tandem") for the final orbit stage, once all
 // five elements are grown — loops for as long as that stage is on screen.
 //
+// Plus one one-shot "intro" cue that fires on "Tap to Begin", timed to the
+// landing screen's typing animation (~6s) — does not loop. Until a dedicated
+// intro clip is loaded via loadIntro(), triggerIntro() falls back to playing
+// the tandem track once as a placeholder.
+//
 // Usage:
 //   await sound.init()
 //   await sound.loadElement('wood', { seed: '/audio/wood-seed.mp3', grow: '/audio/wood.mp3' })
 //   sound.trigger('wood')          // call once per placement / reactivation
 //   await sound.loadAmbient('/audio/tandem.mp3')
 //   sound.triggerAmbient()         // call once, on entering the final orbit stage
+//   sound.triggerIntro()           // call once, on "Tap to Begin"
 
 export class SoundEngine {
   constructor() {
@@ -21,6 +27,7 @@ export class SoundEngine {
     this._activeNodes = {}  // { [element]: { seed: AudioBufferSourceNode, grow: AudioBufferSourceNode } }
     this._ambientBuffer = null
     this._ambientNode = null
+    this._introBuffer = null
     this._ready = false
   }
 
@@ -72,6 +79,21 @@ export class SoundEngine {
     if (!this._ambientNode) return
     try { this._ambientNode.stop() } catch {}
     this._ambientNode = null
+  }
+
+  // Optional — only needed once a dedicated intro clip exists.
+  async loadIntro(url) {
+    if (!this._ready) throw new Error('Call init() first')
+    this._introBuffer = await this._decode(url)
+  }
+
+  // Call once on "Tap to Begin" — one-shot, does not loop. Uses the dedicated
+  // intro clip if loaded, otherwise falls back to the tandem track.
+  triggerIntro() {
+    if (!this._ready) return
+    const buffer = this._introBuffer || this._ambientBuffer
+    if (!buffer) return
+    this._play(buffer)
   }
 
   // Call on gesture-confirmed (initial placement) and on dormant-orb reactivation.

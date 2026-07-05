@@ -99,7 +99,7 @@
       min-height: 5em;
     }
 
-    /* Preload screen — shown instantly on load, before models/assets are ready */
+    /* Preload screen — shown instantly on load; tap dismisses it and unlocks audio */
     #preload-screen {
       position: fixed;
       inset: 0;
@@ -111,18 +111,28 @@
       justify-content: center;
       text-align: center;
       padding: 0 8vw;
+      cursor: pointer;
       transition: opacity 1s ease;
     }
     #preload-screen.hidden {
       opacity: 0;
       pointer-events: none;
     }
-    #preload-sound {
+    #preload-tap {
       font-family: 'Cinzel Decorative', serif;
       font-size: clamp(1.6rem, 6.5vw, 2.7rem);
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    #preload-sound {
+      font-family: 'Josefin Sans', sans-serif;
+      font-size: clamp(0.62rem, 2.2vw, 0.76rem);
+      font-weight: 700;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      opacity: 0.7;
       margin-bottom: 22px;
     }
     #preload-warning {
@@ -206,6 +216,7 @@
 
     /* ── Text shadow — legibility over bright camera feed ── */
     #landing-title,
+    #preload-tap,
     #preload-sound,
     #preload-warning,
     #loading-label,
@@ -334,6 +345,7 @@
 
   <!-- Preload screen: shown instantly, covers the model/asset loading gap -->
   <div id="preload-screen">
+    <p id="preload-tap">Tap to Begin</p>
     <p id="preload-sound">Sound On</p>
     <div id="preload-warning">
       <span id="preload-warning-label">Warning</span>
@@ -388,57 +400,6 @@
 
     <p id="final-hint">Reach the Flowergirls</p>
   </div>
-
-  <script>
-    // Typing effect for landing description
-    const LINES = [
-      'Your Hand Gestures',
-      'Bloom Five Elemental',
-      'Flowergirls.',
-    ]
-    const CHAR_DELAY = 65   // ms per character
-    const LINE_PAUSE = 320  // extra pause between lines
-
-    function startTyping() {
-      const el     = document.getElementById('landing-desc')
-      const cursor = document.createElement('span')
-      cursor.className = 'typing-cursor'
-      el.innerHTML = ''
-      el.appendChild(cursor)
-
-      let lineIdx = 0, charIdx = 0
-
-      function typeNext() {
-        if (lineIdx >= LINES.length) {
-          // done — cursor keeps blinking
-          return
-        }
-        const line = LINES[lineIdx]
-        if (charIdx < line.length) {
-          cursor.insertAdjacentText('beforebegin', line[charIdx])
-          charIdx++
-          setTimeout(typeNext, CHAR_DELAY)
-        } else {
-          // end of line
-          lineIdx++
-          charIdx = 0
-          if (lineIdx < LINES.length) {
-            cursor.insertAdjacentHTML('beforebegin', '<br>')
-            setTimeout(typeNext, LINE_PAUSE)
-          }
-        }
-      }
-
-      setTimeout(typeNext, 600)
-    }
-
-    window.addEventListener('DOMContentLoaded', startTyping)
-
-    // Preload screen covers the initial model/asset loading gap, then fades
-    setTimeout(() => {
-      document.getElementById('preload-screen').classList.add('hidden')
-    }, 2500)
-  </script>
 
   <script type="module" src="/src/main.js"></script>
 </body>

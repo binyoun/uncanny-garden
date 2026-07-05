@@ -223,13 +223,18 @@ const tree       = new GrowTree(scene)
 const sound      = new SoundEngine()
 const handPhotos = new HandPhotoSystem(scene)
 
-sound.init().then(() => Promise.all([
+const soundReady = sound.init()
+
+soundReady.then(() => Promise.all([
   ...SEQUENCE.map((el) => sound.loadElement(el, {
     seed: `${BASE}audio/${el}-seed.mp3`,
     grow: `${BASE}audio/${el}.mp3`,
   })),
   sound.loadAmbient(`${BASE}audio/tandem.mp3`),
 ])).catch((err) => console.warn('Sound load failed:', err))
+
+// No dedicated intro clip yet — triggerIntro() falls back to the tandem
+// track as a placeholder until Gustavo delivers one.
 
 // iOS/Safari suspend AudioContext until a user gesture
 window.addEventListener('touchstart', () => sound.resume(), { once: true })
@@ -250,6 +255,69 @@ const video = document.getElementById('camera-feed')
 // ── Landing ───────────────────────────────────────────────────
 const landing      = document.getElementById('landing')
 const loadingLabel = document.getElementById('loading-label')
+
+// ── Typing effect for landing description ──────────────────────
+// Starts on "Tap to Begin" (not page load) so it always plays in full,
+// however long the visitor takes to tap.
+const TYPE_LINES = [
+  'Your Hand Gestures',
+  'Bloom Five Elemental',
+  'Flowergirls.',
+]
+const CHAR_DELAY = 65   // ms per character
+const LINE_PAUSE = 320  // extra pause between lines
+
+function startTyping() {
+  const el     = document.getElementById('landing-desc')
+  const cursor = document.createElement('span')
+  cursor.className = 'typing-cursor'
+  el.innerHTML = ''
+  el.appendChild(cursor)
+
+  let lineIdx = 0, charIdx = 0
+
+  function typeNext() {
+    if (lineIdx >= TYPE_LINES.length) {
+      // done — cursor keeps blinking
+      return
+    }
+    const line = TYPE_LINES[lineIdx]
+    if (charIdx < line.length) {
+      cursor.insertAdjacentText('beforebegin', line[charIdx])
+      charIdx++
+      setTimeout(typeNext, CHAR_DELAY)
+    } else {
+      // end of line
+      lineIdx++
+      charIdx = 0
+      if (lineIdx < TYPE_LINES.length) {
+        cursor.insertAdjacentHTML('beforebegin', '<br>')
+        setTimeout(typeNext, LINE_PAUSE)
+      }
+    }
+  }
+
+  setTimeout(typeNext, 600)
+}
+
+// ── Preload / "Tap to Begin" ────────────────────────────────────
+const preloadScreen = document.getElementById('preload-screen')
+let landingStartTime = null
+let tappedBegin = false
+
+function beginExperience() {
+  if (tappedBegin) return
+  tappedBegin = true
+  sound.resume()
+  sound.triggerIntro()
+  preloadScreen.classList.add('hidden')
+  startTyping()
+  landingStartTime = Date.now()
+  maybeEnterAR()
+}
+
+preloadScreen.addEventListener('touchstart', beginExperience, { once: true })
+preloadScreen.addEventListener('click',      beginExperience, { once: true })
 
 // ── HUD ───────────────────────────────────────────────────────
 const hud           = document.getElementById('hud')
@@ -506,12 +574,13 @@ let trackerReady   = false
 let loadedCount    = 0
 let arEntered      = false
 const MIN_MODELS   = 3
-const LANDING_MIN_MS = 10000
-const pageLoadTime = Date.now()
+// Covers the typing animation (~4.6s) plus a short pause to read the final
+// line — measured from "Tap to Begin", not from page load.
+const LANDING_MIN_MS = 6000
 
 function maybeEnterAR() {
-  if (arEntered || !trackerReady || loadedCount < MIN_MODELS) return
-  const elapsed = Date.now() - pageLoadTime
+  if (arEntered || !trackerReady || loadedCount < MIN_MODELS || landingStartTime === null) return
+  const elapsed = Date.now() - landingStartTime
   if (elapsed < LANDING_MIN_MS) {
     setTimeout(maybeEnterAR, LANDING_MIN_MS - elapsed)
     return
