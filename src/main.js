@@ -85,12 +85,56 @@ const HAND_WAVE_SCALE = 0.55   // ambient all-five jitter is a lighter version o
 const mutateUntil   = {}   // element -> timestamp
 const mutateStart   = {}   // element -> timestamp, for the smooth (water) envelope
 const mutateFlipped = {}   // element -> bool, this touch mirror-flipped the model
-function mutateModel(element) {
+
+// A mutation that fully reverts isn't a mutation — each touch leaves the
+// model permanently a little different: distorted along one random axis
+// (not just uniformly bigger — that read as "zoomed in", not "changed"),
+// and a small permanent floor of surface glitch that never fully clears,
+// so the model looks visibly mutated even at rest, not just mid-flash.
+const DEFORM_STEP   = 0.35   // per-touch stretch amount on the chosen axis
+const DEFORM_SQUASH  = 0.22  // per-touch squash amount on a different axis
+const DEFORM_MAX      = 2.4  // cap on any single axis's stretch
+const DEFORM_MIN      = 0.4  // floor on any single axis's squash
+const mutationDeform = {}   // element -> { x, y, z } permanent per-axis scale multiplier
+
+const RESIDUAL_GLITCH_STEP = 0.14   // permanent glitch floor gained per touch
+const RESIDUAL_GLITCH_CAP  = 0.55   // cap so it never fully corrupts the surface
+const mutationResidual = {}   // element -> permanent minimum uGlitch value
+
+// Called every frame the hand stays in range of a model — refreshes the
+// transient burst each time, but only accumulates the permanent traits and
+// captures a photo once per distinct touch (not once per frame of contact).
+function mutateModel(element, worldPos) {
+  const now = performance.now()
   const profile = MUTATE_PROFILES[element] ?? MUTATE_PROFILES.wood
+  const isNewTouch = !(mutateUntil[element] && now < mutateUntil[element])
+
   triggerGlitchBurst(Math.min(profile.durationMs, 300), false)
-  mutateStart[element]   = performance.now()
-  mutateUntil[element]   = mutateStart[element] + profile.durationMs
+  mutateStart[element]   = now
+  mutateUntil[element]   = now + profile.durationMs
   mutateFlipped[element] = Math.random() < profile.flipChance
+
+  if (!isNewTouch) return
+
+  const deform = mutationDeform[element] ?? { x: 1, y: 1, z: 1 }
+  const axes = ['x', 'y', 'z']
+  const stretchAxis = axes[Math.floor(Math.random() * 3)]
+  const squashAxis  = axes[Math.floor(Math.random() * 3)]
+  deform[stretchAxis] = Math.min(deform[stretchAxis] + DEFORM_STEP, DEFORM_MAX)
+  deform[squashAxis]  = Math.max(deform[squashAxis] - DEFORM_SQUASH, DEFORM_MIN)
+  mutationDeform[element] = deform
+
+  mutationResidual[element] = Math.min((mutationResidual[element] ?? 0) + RESIDUAL_GLITCH_STEP, RESIDUAL_GLITCH_CAP)
+
+  // capture the participant at the moment of mutation, same seed-photo
+  // treatment as the original gesture-confirm, briefly held then dissolved.
+  // Sized much bigger than the AR-sequence default (0.6) since the final
+  // orbit stage's camera distance is far greater — same size there would
+  // render as a barely-visible speck.
+  if (worldPos) {
+    handPhotos.spawn(element, video, worldPos, 1.6)
+    setTimeout(() => handPhotos.collapse(element, 500), 350)
+  }
 }
 
 // ── Intro scene ───────────────────────────────────────────────
@@ -297,7 +341,7 @@ function onElementComplete(el) {
 }
 
 // ── Final orbit state ─────────────────────────────────────────
-const ORBIT_SCALE  = 1.2
+const ORBIT_SCALE  = 1.44
 const ORBIT_RADIUS = 2.3
 const orbitBaseX   = {}   // element -> base circle X, so jitter can offset it instead of replacing it
 
@@ -736,14 +780,20 @@ renderer.setAnimationLoop(() => {
         anchor.position.x = orbitBaseX[el]
       }
 
+      const residualGlitch = mutationResidual[el] ?? 0
       for (const u of tree.getMaterialUniforms(el)) {
-        u.uGlitch.value    = uGlitch
+        u.uGlitch.value    = Math.max(uGlitch, residualGlitch)
         u.uWobbleAmp.value = mutateProfile.vertexWobbleAmp
         u.uTime.value      = t
       }
 
-      const finalScale = ORBIT_SCALE * pulse
-      anchor.scale.set(flipped ? -finalScale : finalScale, finalScale, finalScale)
+      const deform     = mutationDeform[el] ?? { x: 1, y: 1, z: 1 }
+      const baseScale  = ORBIT_SCALE * pulse
+      anchor.scale.set(
+        (flipped ? -baseScale : baseScale) * deform.x,
+        baseScale * deform.y,
+        baseScale * deform.z,
+      )
 
       const worldPos = new THREE.Vector3()
       anchor.getWorldPosition(worldPos)
@@ -755,7 +805,7 @@ renderer.setAnimationLoop(() => {
         const palmPx  = { x: (1 - lastPalm.x) * window.innerWidth, y: lastPalm.y * window.innerHeight }
         const modelPx = worldToScreenPx(worldPos)
         const dx = palmPx.x - modelPx.x, dy = palmPx.y - modelPx.y
-        if (Math.sqrt(dx * dx + dy * dy) < TOUCH_RADIUS_PX) mutateModel(el)
+        if (Math.sqrt(dx * dx + dy * dy) < TOUCH_RADIUS_PX) mutateModel(el, worldPos)
       }
     })
 

@@ -57,8 +57,11 @@ export class HandPhotoSystem {
     this._active = {}   // element -> record
   }
 
-  // Captures the current video frame (center-cropped square) and shows it at worldPos.
-  spawn(element, video, worldPos) {
+  // Captures the current video frame (center-cropped square) and shows it at
+  // worldPos. `size` should scale with how far worldPos sits from the camera
+  // (0.6 suits the close-up AR sequence; the final orbit stage is much
+  // farther out and needs a bigger plane to read as more than a speck).
+  spawn(element, video, worldPos, size = 0.6) {
     this._disposeOne(element)
 
     const vw = video.videoWidth  || 640
@@ -69,7 +72,12 @@ export class HandPhotoSystem {
     const canvas = document.createElement('canvas')
     canvas.width = canvas.height = SIZE
     const ctx = canvas.getContext('2d')
-    ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, SIZE, SIZE)
+    try {
+      ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, SIZE, SIZE)
+    } catch (err) {
+      console.warn('HandPhoto capture failed:', err)
+      return
+    }
 
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
@@ -84,11 +92,16 @@ export class HandPhotoSystem {
       fragmentShader: FRAGMENT_SHADER,
       transparent: true,
       depthWrite: false,
+      depthTest:  false,   // always visible regardless of nearby transparent geometry
+                            // (particles, other models) — this is an overlay, not a
+                            // scene object that should be occludable
     })
 
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), material)
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material)
+    mesh.renderOrder   = 999   // draw last, on top of everything else
+    mesh.frustumCulled = false
     mesh.position.copy(worldPos)
-    mesh.position.y += 0.35
+    mesh.position.y += size * 0.583
     this._scene.add(mesh)
 
     this._active[element] = {
