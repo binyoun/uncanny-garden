@@ -28,6 +28,7 @@ export class SoundEngine {
     this._ambientBuffer = null
     this._ambientNode = null
     this._introBuffer = null
+    this._introNode = null
     this._ready = false
   }
 
@@ -93,7 +94,15 @@ export class SoundEngine {
     if (!this._ready) return
     const buffer = this._introBuffer || this._ambientBuffer
     if (!buffer) return
-    this._play(buffer)
+    this._introNode = this._play(buffer)
+  }
+
+  // Cuts the intro cue short if it's still playing — called automatically
+  // by trigger() so it can never overlap the first element's sound.
+  stopIntro() {
+    if (!this._introNode) return
+    try { this._introNode.stop() } catch {}
+    this._introNode = null
   }
 
   // Call on gesture-confirmed (initial placement) and on dormant-orb reactivation.
@@ -102,6 +111,7 @@ export class SoundEngine {
     if (!this._ready) return
     const buf = this._buffers[element]
     if (!buf) return
+    this.stopIntro()
     this._stopElement(element)
     this._activeNodes[element] = {
       seed: this._play(buf.seed),
