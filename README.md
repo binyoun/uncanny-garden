@@ -1,10 +1,12 @@
 # Uncanny Garden
 
+> Uncanny Garden is a collaborative augmented reality experience inspired by Randi Matushevitz's Flowergirl and Limelight (2026). Participants summon five "Flowergirls" through hand gestures rooted in elemental cosmology to evoke their florescence. A mediated ritual exploring fertility, transformation, and the self, it invokes lush and electronic sonorities to complement the uncanniness.
+
 A browser-based WebAR experience in which five elemental entities (五行 / 오행) are summoned through hand gesture. No app, no markers -- only the camera, the hand, and the body's memory of gesture.
 
 **Live:** [uncanny.live](https://uncanny.live)
 
-> Uncanny Garden is a collaborative augmented reality experience inspired by Randi Matushevitz's Flowergirl and Limelight (2026). Participants summon five "Flowergirls" through hand gestures rooted in elemental cosmology to evoke their florescence. A mediated ritual exploring fertility, transformation, and the self, it invokes lush and electronic sonorities to complement the uncanniness.
+
 
 ---
 
