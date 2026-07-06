@@ -4,14 +4,16 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 
 **Live:** [uncanny.live](https://uncanny.live)
 
+> Uncanny Garden is a collaborative augmented reality experience inspired by Randi Matushevitz's Flowergirl and Limelight (2026). Participants summon five "Flowergirls" through hand gestures rooted in elemental cosmology to evoke their florescence. A mediated ritual exploring fertility, transformation, and the self, it invokes lush and electronic sonorities to complement the uncanniness.
+
 ---
 
 ## Experience Flow
 
 1. Open the site on a mobile browser and allow camera access.
-2. A preload screen appears instantly, before any model finishes loading -- "Sound On" plus a content warning (sudden and high-pitched sounds), so the wait for assets doubles as an intentional beat rather than a blank stall.
-3. The landing screen fades in: an animated 3D hair model with direction text typed character by character, plus a pulsing "Sound On" reminder.
-4. After models load (minimum 10 seconds on the landing), AR mode begins automatically.
+2. A preload screen appears instantly, before any model finishes loading -- "Sound On" plus a content warning (sudden and high-pitched sounds), and a "Tap to Begin" prompt, so the wait for assets doubles as an intentional beat rather than a blank stall.
+3. Tapping "Tap to Begin" unlocks audio (iOS requires a user gesture), plays a dedicated intro cue, requests the camera, and starts the landing screen: an animated 3D hair model with direction text typed character by character.
+4. After models load (minimum 6 seconds on the landing), AR mode begins automatically.
 5. A gesture prompt appears for the first element (Wood). Hold the correct gesture steady for 1.5 seconds to confirm.
 6. On confirm, a snapshot of the participant's own hand appears at the placement point -- a soft, seed-shaped photo. The model begins growing from that same spot over ~36 seconds, with slow organic rotation and periodic "corruption" stutters whose character (timing, intensity, whether it snaps or swells) is unique to each element. Partway through, the hand-photo folds into a spinning kaleidoscope and dissolves, handing off from "photo of the hand" to "the model."
 7. One-finger drag rotates and lifts the model. Two-finger pinch moves it closer or further along the line of sight.
@@ -63,7 +65,7 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 - **3D models** -- GLB format, meshopt-compressed with WebP textures (≤5 MB each), loaded with `GLTFLoader` + `MeshoptDecoder`
 - **Particle system** -- Custom double-helix `BufferGeometry` (120 particles, additive blending, element-colored glow, dot size 0.11)
 - **Dormant orbs** -- 3-particle swirling cluster per element using the same glow texture; transparent `SphereGeometry` hitbox for reliable tap raycasting
-- **Audio** -- `SoundEngine` (Web Audio API): per-element growth track + one-shot seed accent triggered together on placement, plus a looping ambient "tandem" track for the final orbit stage
+- **Audio** -- `SoundEngine` (Web Audio API): per-element growth track + one-shot seed accent triggered together on placement, a looping ambient "tandem" track for the final orbit stage, and a one-shot intro cue on "Tap to Begin". Sound composed by Gustavo Guzmán: lush strings pulverized via granular and FM processing, with per-element gesture-triggered sounds
 - **Hand-photo capture** -- `HandPhoto` captures the participant's hand from the camera feed at the moment of gesture-confirm, masked into a soft seed-shaped oval, then folds into a spinning kaleidoscope and dissolves as the real model grows in
 - **Glitch system** -- Layered across three levels: a screen-wide `EffectComposer` + `GlitchPass` burst; rigid-body scale/rotation/position jitter on each model's anchor; and `ModelGlitch`, which patches each model's own material (`onBeforeCompile`) for surface-level color corruption and a vertex-shader wobble. All three read from shared per-element "personality" profiles matched to elemental character -- fire is fast and violent, earth is rare and heavy, metal is brief and rigid with sharp mirror-flips, water swells smoothly instead of snapping, wood is the moderate baseline. In the final orbit stage, touch-mutation is additionally permanent and cumulative: non-uniform axis distortion plus a residual glitch floor that never fully clears, both capped per element
 - **Fonts** -- Cinzel Decorative (title, gesture prompts, final-stage hint), Josefin Sans (credits, sound/warning copy)
@@ -99,7 +101,8 @@ uncanny-garden/
 │       ├── earth.mp3, earth-seed.mp3
 │       ├── metal.mp3, metal-seed.mp3
 │       ├── water.mp3, water-seed.mp3
-│       └── tandem.mp3                    # Final orbit stage ambient loop
+│       ├── tandem.mp3                    # Final orbit stage ambient loop
+│       └── intro.mp3                     # "Tap to Begin" one-shot cue
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml      # Build + deploy to GitHub Pages on push to main
@@ -168,6 +171,32 @@ git config http.postBuffer 524288000
 ## Five Elements Reference
 
 The work is structured around an ancient elemental cosmology (木火土金水): Wood (목), Fire (화), Soil (토), Metal (금), Water (수). Each element is associated with a cardinal direction, season, color, and body of correspondences, here mapped to hand gesture, 3D form, spatial position, sound, and glitch character in the AR field.
+
+---
+
+## Statements (publishable)
+
+Final publishable versions, locked 2026-07-06. Copy-paste source: `uncanny-garden-statements.txt`.
+
+### Long description (200 words)
+
+Uncanny Garden emerges from a collaboration between Techspressionist visual artist Randi Matushevitz, AR artist Bin Youn, and sound composer Gustavo Guzmán. Rooted in Matushevitz's ongoing exploration of the Flowergirl figure, the work extends her visual world into augmented space and original sound.
+
+Drawing from both Western and East Asian elemental philosophies, the work maps five elemental energies onto hand gesture, 3D botanical form, and spatial position within an augmented reality field. Each element carries its cardinal direction, season, and color into a surrealist landscape inhabited by the Maiden archetype: the flower girl, seeding, blooming, transforming. Participants invoke each figure through sustained gestures, becoming co-authors in a mediated ritual.
+
+At its center, Uncanny Garden holds the ancient fertility symbol not as a relic but as an uncanny living presence. The work holds space for duality: interior and exterior self, the imagined and the real, what we reveal and what we conceal. The grandiose self and the shadow self can coexist.
+
+Techspressionism provides the philosophical ground for this encounter between the digital and the elemental. What is old is made new: ancient ritual, spirit, and myth experienced through contemporary technology, art, and music as a 21st-century act of seeing and becoming.
+
+### Technical statement (200 words)
+
+Uncanny Garden is a browser-based augmented reality experience requiring no application installation. Activated by QR code in a standard mobile browser, the work uses the device camera for real-time hand tracking and spatial AR.
+
+A custom hand gesture classifier maps five hand positions across ancient elemental cosmology (木火土金水): open palm to Wood, raised index to Fire, closed fist to Soil, peace sign to Metal, and OK ring to Water. A 1.5-second hold-confirm creates a deliberate moment before each summoning.
+
+Three.js renders the environment with filmic tone mapping and image-based lighting. A four-phase state machine governs each figure: seed, grow (36 seconds), recede, and dormant. In the dormant state, a glowing particle orb persists; tapping it reactivates the cycle. Touch controls allow one-finger rotation and two-finger depth movement; in the final stage, all five figures form a ring surrounding the viewer, navigable by drag and pinch. The work deploys at uncanny.live.
+
+The sonorities thread about and tension the concepts of uncanny empathy and East Asian elemental cosmology. Summoned Flower Girls are accompanied by lush strings pulverized via granular and FM processing. Elemental sounds triggered by gesture reinforce a parodied yet empathic aesthetic, creating sonic disorientation that embodies the work's surrealist vision.
 
 ---
 
