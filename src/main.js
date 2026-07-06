@@ -231,10 +231,8 @@ soundReady.then(() => Promise.all([
     grow: `${BASE}audio/${el}.mp3`,
   })),
   sound.loadAmbient(`${BASE}audio/tandem.mp3`),
+  sound.loadIntro(`${BASE}audio/intro.mp3`),
 ])).catch((err) => console.warn('Sound load failed:', err))
-
-// No dedicated intro clip yet — triggerIntro() falls back to the tandem
-// track as a placeholder until Gustavo delivers one.
 
 // iOS/Safari suspend AudioContext until a user gesture
 window.addEventListener('touchstart', () => sound.resume(), { once: true })
