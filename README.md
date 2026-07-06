@@ -1,4 +1,4 @@
-# Uncanny Garden
+# <img src="public/favicon.png" width="28" alt=""> Uncanny Garden
 
 > Uncanny Garden is a collaborative augmented reality experience inspired by Randi Matushevitz's Flowergirl and Limelight (2026). Participants summon five "Flowergirls" through hand gestures rooted in elemental cosmology to evoke their florescence. A mediated ritual exploring fertility, transformation, and the self, it invokes lush and electronic sonorities to complement the uncanniness.
 
