@@ -6,10 +6,14 @@
 // Plus one ambient track ("tandem") for the final orbit stage, once all
 // five elements are grown — loops for as long as that stage is on screen.
 //
-// Plus one one-shot "intro" cue that fires on "Tap to Begin", timed to the
-// landing screen's typing animation (~6s) — does not loop. Until a dedicated
-// intro clip is loaded via loadIntro(), triggerIntro() falls back to playing
-// the tandem track once as a placeholder.
+// Plus one "intro" cue that fires on "Tap to Begin" and loops seamlessly until
+// the first element is summoned. The clip can't just be handed to node.loop:
+// MP3 decoding leaves ~23 ms of silence at its head, and its tail runs at full
+// level to the last sample, so a raw loop drops a hole and then a tick into
+// every wrap. loadIntro() bakes a loopable buffer instead — see
+// _makeSeamlessLoop — after which a plain node.loop is genuinely gapless.
+// Until a dedicated intro clip is loaded, triggerIntro() falls back to looping
+// the tandem track as a placeholder.
 //
 // Usage:
 //   await sound.init()
@@ -19,6 +23,21 @@
 //   sound.triggerAmbient()         // call once, on entering the final orbit stage
 //   sound.triggerIntro()           // call once, on "Tap to Begin"
 
+// Seconds the looping intro takes to fade out when it's cut short — the loop
+// can be anywhere in the clip when the first gesture lands, so it needs a
+// ramp rather than a hard stop.
+const INTRO_FADE = 0.6
+
+// Seconds of the clip's tail folded back over its own head to make the wrap
+// continuous. Long enough to bridge the waveform discontinuity, short enough
+// that the clip is never audibly playing against itself (which is what a
+// long crossfade sounds like: phasing).
+const INTRO_LOOP_XFADE = 0.03
+
+// Amplitude below which a sample counts as decoder padding rather than signal
+// (-60 dBFS).
+const SILENCE_FLOOR = 0.001
+
 export class SoundEngine {
   constructor() {
     this._ctx = null
@@ -27,8 +46,9 @@ export class SoundEngine {
     this._activeNodes = {}  // { [element]: { seed: AudioBufferSourceNode, grow: AudioBufferSourceNode } }
     this._ambientBuffer = null
     this._ambientNode = null
-    this._introBuffer = null
+    this._introBuffer = null  // baked by _makeSeamlessLoop, not the raw decode
     this._introNode = null
+    this._introGain = null    // own gain so stopIntro can fade the loop out
     this._introPending = false
     this._ready = false
   }
@@ -87,20 +107,69 @@ export class SoundEngine {
   // Optional — only needed once a dedicated intro clip exists.
   async loadIntro(url) {
     if (!this._ready) throw new Error('Call init() first')
-    this._introBuffer = await this._decode(url)
+    this._introBuffer = this._makeSeamlessLoop(await this._decode(url))
     this._tryPendingIntro()
   }
 
-  // Call once on "Tap to Begin" — one-shot, does not loop. Uses the dedicated
+  // Turns a decoded clip into one that can be looped with node.loop and no
+  // audible seam. Two problems to solve, in order:
+  //
+  //   1. MP3 decoding pads the clip with silence. Left in, that silence plays
+  //      at every wrap as a hole in the sound. So: find the first and last
+  //      samples that are actually signal, and keep only what's between them.
+  //   2. The trimmed clip now ends mid-gesture at full level and restarts at
+  //      full level, and the two waveforms don't meet — a step discontinuity,
+  //      heard as a tick. So: drop the last INTRO_LOOP_XFADE of the clip and
+  //      mix it, fading out, over the clip's own head, which fades in to meet
+  //      it. The head now *is* the tail resolving into itself, so playback
+  //      wrapping from the last sample to the first is continuous.
+  //
+  // The crossfade is baked into the buffer once at load, not performed live on
+  // every wrap, so looping costs nothing at runtime.
+  _makeSeamlessLoop(buffer) {
+    const { numberOfChannels: channels, sampleRate, length } = buffer
+    const src = []
+    for (let c = 0; c < channels; c++) src.push(buffer.getChannelData(c))
+
+    const isSignal = (i) => {
+      for (let c = 0; c < channels; c++) if (Math.abs(src[c][i]) > SILENCE_FLOOR) return true
+      return false
+    }
+    let head = 0
+    while (head < length && !isSignal(head)) head++
+    let tail = length
+    while (tail > head && !isSignal(tail - 1)) tail--
+
+    const body = tail - head
+    const xfade = Math.min(Math.round(INTRO_LOOP_XFADE * sampleRate), Math.floor(body / 4))
+    if (body <= 0 || xfade <= 0) return buffer   // clip too short to bake; loop it raw
+
+    const loopLength = body - xfade
+    const looped = this._ctx.createBuffer(channels, loopLength, sampleRate)
+    for (let c = 0; c < channels; c++) {
+      const from = src[c]
+      const to = looped.getChannelData(c)
+      to.set(from.subarray(head, head + loopLength))
+      for (let i = 0; i < xfade; i++) {
+        const x = i / xfade
+        const rising  = Math.cos((1 - x) * 0.5 * Math.PI)   // equal-power, 0 → 1
+        const falling = Math.cos(x * 0.5 * Math.PI)         // equal-power, 1 → 0
+        to[i] = to[i] * rising + from[head + loopLength + i] * falling
+      }
+    }
+    return looped
+  }
+
+  // Call once on "Tap to Begin" — loops until stopIntro(). Uses the dedicated
   // intro clip if loaded, otherwise falls back to the tandem track. If
   // neither has finished loading yet (likely — this fires the instant the
-  // visitor taps, while audio is still being fetched/decoded), it plays as
+  // visitor taps, while audio is still being fetched/decoded), it starts as
   // soon as one becomes available instead of silently doing nothing.
   triggerIntro() {
     if (!this._ready) return
     const buffer = this._introBuffer || this._ambientBuffer
     if (buffer) {
-      this._introNode = this._play(buffer)
+      this._startIntro(buffer)
     } else {
       this._introPending = true
     }
@@ -111,18 +180,37 @@ export class SoundEngine {
     const buffer = this._introBuffer || this._ambientBuffer
     if (!buffer) return
     this._introPending = false
-    this._introNode = this._play(buffer)
+    this._startIntro(buffer)
   }
 
-  // Cuts the intro cue short if it's still playing (or cancels it if it
-  // hasn't started yet) — called automatically by trigger() so it can never
-  // overlap the first element's sound, even if that fires before intro
-  // audio finished loading.
+  _startIntro(buffer) {
+    if (this._introNode) return
+    const gain = this._ctx.createGain()
+    gain.connect(this._masterGain)
+    this._introGain = gain
+    this._introNode = this._play(buffer, { destination: gain, loop: true })
+  }
+
+  // Fades the looping intro out (or cancels it if it hasn't started yet) —
+  // called automatically by trigger() so it can never overlap the first
+  // element's sound, even if that fires before intro audio finished loading.
+  // The loop can be anywhere in the clip when the gesture lands, so it needs a
+  // ramp rather than a hard stop.
   stopIntro() {
     this._introPending = false
     if (!this._introNode) return
-    try { this._introNode.stop() } catch {}
+
+    const node = this._introNode
+    const gain = this._introGain
     this._introNode = null
+    this._introGain = null
+
+    const t = this._ctx.currentTime
+    const end = t + INTRO_FADE
+    gain.gain.setValueAtTime(gain.gain.value, t)
+    gain.gain.linearRampToValueAtTime(0, end)
+    try { node.stop(end) } catch {}
+    node.onended = () => { try { gain.disconnect() } catch {} }
   }
 
   // Call on gesture-confirmed (initial placement) and on dormant-orb reactivation.
@@ -139,10 +227,11 @@ export class SoundEngine {
     }
   }
 
-  _play(buffer) {
+  _play(buffer, { destination = this._masterGain, loop = false } = {}) {
     const node = this._ctx.createBufferSource()
     node.buffer = buffer
-    node.connect(this._masterGain)
+    node.loop = loop
+    node.connect(destination)
     node.start()
     return node
   }
