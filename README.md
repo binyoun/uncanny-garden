@@ -117,7 +117,7 @@ flowchart LR
     Cam["Camera feed"] --> MP["MediaPipe HandLandmarker"]
     MP --> HT["HandTracker.js<br/>gesture classify, hold-confirm"]
     HT --> Main["main.js<br/>AR render loop, HUD, event wiring"]
-    Main --> GT["GrowTree.js<br/>seed → grow → recede → dormant"]
+    Main --> GT["GrowFlower Machine<br/>(GrowTree.js)<br/>seed → grow → recede → dormant"]
     GT --> PS["ParticleSystem.js<br/>double-helix emitter + dormant orb"]
     GT --> SE["SoundEngine.js<br/>per-element track + seed accent"]
     GT --> HP["HandPhoto.js<br/>capture, seed mask, kaleidoscope dissolve"]
@@ -126,7 +126,7 @@ flowchart LR
     HT -->|"final-stage touch"| MG
 ```
 
-`main.js` is the orchestrator: it owns the AR render loop and HUD, and wires `HandTracker`'s gesture events into `GrowTree`'s state machine. Everything else (`ParticleSystem`, `SoundEngine`, `HandPhoto`, `ModelGlitch`) reacts to `GrowTree`'s phase changes rather than talking to each other directly.
+`main.js` is the orchestrator: it owns the AR render loop and HUD, and wires `HandTracker`'s gesture events into the GrowFlower Machine (`GrowTree.js`). Everything else (`ParticleSystem`, `SoundEngine`, `HandPhoto`, `ModelGlitch`) reacts to the GrowFlower Machine's phase changes rather than talking to each other directly.
 
 ---
 
@@ -138,7 +138,7 @@ uncanny-garden/
 ├── src/
 │   ├── main.js             # App entry, AR render loop, HUD, glitch composer, all event wiring
 │   ├── HandTracker.js      # MediaPipe wrapper, gesture classifier, hold-confirm logic
-│   ├── GrowTree.js         # GLB loader, phase state machine (seed→grow→recede→dormant), per-element glitch stutter
+│   ├── GrowTree.js         # GLB loader, GrowFlower Machine (seed→grow→recede→dormant), per-element glitch stutter
 │   ├── ParticleSystem.js   # Double-helix particle emitter (per element)
 │   ├── SoundEngine.js      # Per-element sound (growth track + seed accent + ambient tandem track)
 │   ├── HandPhoto.js        # Hand snapshot capture, seed-shaped mask, kaleidoscope dissolve
@@ -167,7 +167,7 @@ uncanny-garden/
 
 ---
 
-## GrowTree State Machine
+## GrowFlower Machine
 
 Each placed element cycles through four phases:
 
