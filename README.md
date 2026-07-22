@@ -12,6 +12,23 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 
 ## Experience Flow
 
+```mermaid
+flowchart TD
+    A(["Open on mobile, allow camera"]) --> B["Preload: Sound On + warning<br/>Tap to Begin"]
+    B --> C["Landing: hair model, typed text<br/>(min 6s)"]
+    C --> D["AR begins automatically"]
+    D --> E["Gesture prompt for next element"]
+    E --> Seed["Hold gesture 1.5s → hand-photo seed"]
+    Seed --> Grow["Grows ~36s<br/>organic rotation + glitch stutter"]
+    Grow --> Recede["Recedes + glitch burst"]
+    Recede --> Dormant["Dormant particle orb"]
+    Dormant -->|"Wood → Fire → Soil → Metal → Water"| E
+    Dormant -->|"tap orb"| Seed
+    Dormant -->|"all five complete"| Final["Final stage: all five orbit the viewer"]
+    Final --> Nav["Drag / pinch navigates the ring"]
+    Final --> Mutate["Reach toward a model →<br/>permanent, cumulative mutation<br/>+ hand re-capture"]
+```
+
 1. Open the site on a mobile browser and allow camera access.
 2. A preload screen appears instantly, before any model finishes loading -- "Sound On" plus a content warning (sudden and high-pitched sounds), and a "Tap to Begin" prompt, so the wait for assets doubles as an intentional beat rather than a blank stall.
 3. Tapping "Tap to Begin" unlocks audio (iOS requires a user gesture), plays a dedicated intro cue, requests the camera, and starts the landing screen: an animated 3D hair model with direction text typed character by character.
@@ -24,6 +41,21 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 10. In the final stage, drag to spin and tilt the ring; pinch to contract or expand it (now with a much wider zoom range). Hand tracking stays active here: any hand in frame gives all five a light ambient glitch ("Reach the Flowergirls" appears on screen), and reaching toward one specific model -- tracked via the camera, not a screen tap -- mutates just that one, harder and in its own elemental style. The mutation is permanent and cumulative: each touch distorts the model further along a random axis and raises a floor of surface corruption that never fully clears (both capped so repeated touching can't spiral), and re-captures the participant's hand at the point of contact, the same photo-to-kaleidoscope treatment as the original summoning.
 
 ## Gesture Map
+
+```mermaid
+flowchart LR
+    classDef wood fill:#00cc44,stroke:#00cc44,color:#0b1310
+    classDef fire fill:#ff2200,stroke:#ff2200,color:#fff
+    classDef soil fill:#ffcc00,stroke:#ffcc00,color:#0b1310
+    classDef metal fill:#cccccc,stroke:#cccccc,color:#0b1310
+    classDef water fill:#0066ff,stroke:#0066ff,color:#fff
+
+    G1["Open palm"] --> E1["Wood · East"]:::wood
+    G2["Index finger up"] --> E2["Fire · South"]:::fire
+    G3["Closed fist"] --> E3["Soil · Center"]:::soil
+    G4["Peace sign"] --> E4["Metal · West"]:::metal
+    G5["OK ring"] --> E5["Water · North"]:::water
+```
 
 | Gesture | Element | Direction | Color |
 |---|---|---|---|
@@ -76,6 +108,28 @@ A browser-based WebAR experience in which five elemental entities (五行 / 오�
 
 ---
 
+## Architecture
+
+How the modules connect, from camera input to what ends up on screen:
+
+```mermaid
+flowchart LR
+    Cam["Camera feed"] --> MP["MediaPipe HandLandmarker"]
+    MP --> HT["HandTracker.js<br/>gesture classify, hold-confirm"]
+    HT --> Main["main.js<br/>AR render loop, HUD, event wiring"]
+    Main --> GT["GrowTree.js<br/>seed → grow → recede → dormant"]
+    GT --> PS["ParticleSystem.js<br/>double-helix emitter + dormant orb"]
+    GT --> SE["SoundEngine.js<br/>per-element track + seed accent"]
+    GT --> HP["HandPhoto.js<br/>capture, seed mask, kaleidoscope dissolve"]
+    GT --> MG["ModelGlitch.js<br/>per-material shader corruption"]
+    Main --> GC["EffectComposer + GlitchPass<br/>screen-wide burst"]
+    HT -->|"final-stage touch"| MG
+```
+
+`main.js` is the orchestrator: it owns the AR render loop and HUD, and wires `HandTracker`'s gesture events into `GrowTree`'s state machine. Everything else (`ParticleSystem`, `SoundEngine`, `HandPhoto`, `ModelGlitch`) reacts to `GrowTree`'s phase changes rather than talking to each other directly.
+
+---
+
 ## Project Structure
 
 ```
@@ -117,10 +171,30 @@ uncanny-garden/
 
 Each placed element cycles through four phases:
 
-```
-seed (2 s hold) → grow (36 s bloom) → recede (2.5 s shrink) → dormant
-                                                                    ↓
-                                                          tap orb → seed
+```mermaid
+stateDiagram-v2
+    [*] --> Seed
+    Seed --> Grow: 2s hold complete
+    Grow --> Recede: ~36s bloom done
+    Recede --> Dormant: 2.5s shrink
+    Dormant --> Seed: tap orb to reactivate
+
+    note right of Seed
+        Hand-photo snapshot
+        visible as the seed
+    end note
+    note right of Grow
+        easeOutCubic + per-element
+        "personality" corruption stutter
+    end note
+    note right of Recede
+        easeInOutCubic +
+        screen-wide glitch burst
+    end note
+    note right of Dormant
+        3-particle colored orb
+        drifts at anchor position
+    end note
 ```
 
 - **seed** -- tiny seed scale, waiting for grow timer; the hand-photo snapshot is visible here
